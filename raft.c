@@ -339,12 +339,10 @@ static int raftSendAppendEntries(raft_server_t *raft, void *user_data,
 static int raftPersistVote(raft_server_t *raft, void *user_data, int vote)
 {
     RedisRaftCtx *rr = (RedisRaftCtx *) user_data;
-    if (!rr->log) {
-        return 0;
-    }
 
-    rr->log->header->vote = vote;
-    if (!RaftLogUpdate(rr->log, true)) {
+    if (RedisModule_Replicate(rr->ctx, "RAFT.VOTE", "ll",
+                raft_get_current_term(rr->raft),
+                vote) != REDISMODULE_OK) {
         return RAFT_ERR_SHUTDOWN;
     }
 
@@ -354,12 +352,9 @@ static int raftPersistVote(raft_server_t *raft, void *user_data, int vote)
 static int raftPersistTerm(raft_server_t *raft, void *user_data, int term, int vote)
 {
     RedisRaftCtx *rr = (RedisRaftCtx *) user_data;
-    if (!rr->log) {
-        return 0;
-    }
 
-    rr->log->header->term = term;
-    if (rr->log && !RaftLogUpdate(rr->log, true)) {
+    if (RedisModule_Replicate(rr->ctx, "RAFT.VOTE", "ll",
+                term, vote) != REDISMODULE_OK) {
         return RAFT_ERR_SHUTDOWN;
     }
 
@@ -386,13 +381,19 @@ static int raftLogOffer(raft_server_t *raft, void *user_data, raft_entry_t *entr
         entry->data.buf = NULL;
     }
 
-    /* If we're in the process of loading from disk, don't feedback back to
-     * the disk.
-     */
-    if (rr->log && rr->state != REDIS_RAFT_LOADING) {
-        if (!RaftLogAppend(rr->log, entry)) {
-            return RAFT_ERR_SHUTDOWN;
-        }
+    RedisModule_ThreadSafeContextLock(rr->ctx);
+    int ret = RedisModule_Replicate(rr->ctx, "RAFT.ENTRY", "llllb",
+                entry_idx,
+                entry->term,
+                entry->id,
+                entry->type,
+                entry->data.buf,
+                entry->data.len);
+    RedisModuleCallReply *r = RedisModule_Call(rr->ctx, "SET", "cc", "__", "__");
+    if (r != NULL) RedisModule_FreeCallReply(r);
+    RedisModule_ThreadSafeContextUnlock(rr->ctx);
+    if (ret != REDISMODULE_OK) {
+        return RAFT_ERR_SHUTDOWN;
     }
 
     if (!raft_entry_is_cfg_change(entry)) {
@@ -461,12 +462,7 @@ static int raftLogPop(raft_server_t *raft, void *user_data, raft_entry_t *entry,
 
     TRACE("raftLogPop: entry_idx=%d, id=%d\n", entry_idx, entry->id);
 
-    if (!rr->log) {
-        raftFreeEntry(entry);
-        return 0;
-    }
-
-    if (!RaftLogRemoveTail(rr->log)) {
+    if (!RedisModule_Replicate(rr->ctx, "RAFT.RMENTRY", "l", entry_idx) != REDISMODULE_OK) {
         return -1;
     }
 
@@ -480,13 +476,7 @@ static int raftLogPoll(raft_server_t *raft, void *user_data, raft_entry_t *entry
 
     TRACE("raftLogPoll: entry_idx=%d, id=%d\n", entry_idx, entry->id);
 
-    if (!rr->log) {
-        raftFreeEntry(entry);
-        return 0;
-    }
-
-    if (!RaftLogRemoveHead(rr->log)) {
-        LOG_DEBUG("raftLogPoll: RaftLogRemoveHead() failed!\n");
+    if (!RedisModule_Replicate(rr->ctx, "RAFT.RMENTRY", "l", entry_idx) != REDISMODULE_OK) {
         return -1;
     }
 
@@ -499,14 +489,8 @@ static int raftApplyLog(raft_server_t *raft, void *user_data, raft_entry_t *entr
     RedisRaftCtx *rr = user_data;
     RaftCfgChange *req;
 
-    /* Update commit index.
-     * TODO: Do we want to write it now? Probably not sync though.
-     */
-    if (rr->log) {
-        if (entry_idx > rr->log->header->commit_idx) {
-            rr->log->header->commit_idx = entry_idx;
-            RaftLogUpdate(rr->log, false);
-        }
+    if (!RedisModule_Replicate(rr->ctx, "RAFT.APPLY", "l", entry_idx) != REDISMODULE_OK) {
+        return RAFT_ERR_SHUTDOWN;
     }
 
     switch (entry->type) {

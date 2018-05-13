@@ -288,6 +288,43 @@ static int cmdRaftLoadSnapshot(RedisModuleCtx *ctx, RedisModuleString **argv, in
     return REDISMODULE_OK;
 }
 
+static int cmdRaftEntry(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
+{
+    return REDISMODULE_OK;
+}
+
+static int cmdRaftVote(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
+{
+    RedisRaftCtx *rr = &redis_raft;
+
+    if (argc != 3) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_OK;
+    }
+
+    long long term, vote;
+    if (RedisModule_StringToLongLong(argv[1], &term) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx, "ERR invalid term");
+        return REDISMODULE_OK;
+    }
+    if (RedisModule_StringToLongLong(argv[2], &term) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx, "ERR invalid vote");
+        return REDISMODULE_OK;
+    }
+
+    if (raft_set_current_term(rr->raft, term) < 0) {
+        RedisModule_ReplyWithError(ctx, "ERR failed to set term");
+        return REDISMODULE_OK;
+    }
+
+    if (raft_vote_for_nodeid(rr->raft, vote) < 0) {
+        RedisModule_ReplyWithError(ctx, "ERR failed to set vote");
+        return REDISMODULE_OK;
+    }
+
+    RedisModule_ReplyWithSimpleString(ctx, "OK");
+}
+
 static int cmdRaftDebug(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
 {
     RedisRaftCtx *rr = &redis_raft;
@@ -448,6 +485,16 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     }
 
     if (validateConfig(ctx, &config) == REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
+
+    /* Persistent Log Commands */
+    if (RedisModule_CreateCommand(ctx, "raft.vote", cmdRaftVote,
+                "write", 0, 0, 0) == REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
+    if (RedisModule_CreateCommand(ctx, "raft.entry", cmdRaftEntry,
+                "write", 0, 0, 0) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
 
