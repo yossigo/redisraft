@@ -1581,6 +1581,35 @@ static bool handleMultiExec(RedisRaftCtx *rr, RaftReq *req)
     return false;
 }
 
+/* Handle interception of Redis commands that have a different
+ * implementation in RedisRaft.
+ *
+ * This is logically similar to handleMultiExec but implemented
+ * separately for readability purposes.
+ *
+ * Currently intercepted commands:
+ * - CLUSTER
+ *
+ * Returns true if the command was intercepted, in which case the RaftReq has
+ * been replied to and freed.
+ */
+
+static bool handleInterceptedCommands(RedisRaftCtx *rr, RaftReq *req)
+{
+    const char _cmd_cluster[] = "CLUSTER";
+    RaftRedisCommand *cmd = req->r.redis.cmds.commands[0];
+    size_t cmd_len;
+    const char *cmd_str = RedisModule_StringPtrLen(cmd->argv[0], &cmd_len);
+
+    if (cmd_len == sizeof(_cmd_cluster) - 1 &&
+        !strncasecmp(cmd_str, _cmd_cluster, sizeof(_cmd_cluster) - 1)) {
+            handleClusterCommand(rr, req);
+            return true;
+    }
+
+    return false;
+}
+
 static void handleRedisCommand(RedisRaftCtx *rr,RaftReq *req)
 {
     Node *leader_proxy = NULL;
@@ -1608,8 +1637,22 @@ static void handleRedisCommand(RedisRaftCtx *rr,RaftReq *req)
         }
     }
 
-    if (checkRaftState(rr, req) == RR_ERROR ||
-        checkLeader(rr, req, rr->config->follower_proxy ? &leader_proxy : NULL) == RR_ERROR) {
+    /* Check that we're part of a boostrapped cluster and not in the middle of joining
+     * or loading data.
+     */
+    if (checkRaftState(rr, req) == RR_ERROR) {
+        goto exit;
+    }
+
+    /* Handle intercepted commands. We do this also on non-leader nodes or if we don't
+     * have a leader, so it's up to the commands to check these conditions if they have to.
+     */
+    if (handleInterceptedCommands(rr, req)) {
+        return;
+    }
+
+    /* Confirm that we're the leader and handle redirect or proxying if not. */
+    if (checkLeader(rr, req, rr->config->follower_proxy ? &leader_proxy : NULL) == RR_ERROR) {
         goto exit;
     }
 

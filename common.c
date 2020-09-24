@@ -78,9 +78,13 @@ void replyRaftError(RedisModuleCtx *ctx, int error)
  */
 RRStatus checkLeader(RedisRaftCtx *rr, RaftReq *req, Node **ret_leader)
 {
+    const char err_noleader[] = "NOLEADER No raft leader";
+    const char err_clusterdown[] = "CLUSTERDOWN No raft leader";
+
     raft_node_t *leader = raft_get_current_leader_node(rr->raft);
     if (!leader) {
-        RedisModule_ReplyWithError(req->ctx, "NOLEADER No Raft leader");
+        RedisModule_ReplyWithError(req->ctx,
+                rr->config->cluster_mode ? err_clusterdown : err_noleader);
         return RR_ERROR;
     }
     if (raft_node_get_id(leader) != raft_get_nodeid(rr->raft)) {
@@ -98,7 +102,8 @@ RRStatus checkLeader(RedisRaftCtx *rr, RaftReq *req, Node **ret_leader)
             RedisModule_ReplyWithError(req->ctx, reply);
             RedisModule_Free(reply);
         } else {
-            RedisModule_ReplyWithError(req->ctx, "NOLEADER No Raft leader");
+            RedisModule_ReplyWithError(req->ctx,
+                    rr->config->cluster_mode ? err_clusterdown : err_noleader);
         }
         return RR_ERROR;
     }
