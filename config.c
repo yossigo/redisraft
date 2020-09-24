@@ -179,6 +179,13 @@ static RRStatus processConfigParam(const char *keyword, const char *value,
             return RR_ERROR;
         }
         redis_raft_loglevel = loglevel;
+    } else if (!strcmp(keyword, "cluster-mode")) {
+        bool val;
+        if (parseBool(value, &val) != RR_OK) {
+            snprintf(errbuf, errbuflen-1, "invalid 'cluster-mode' value");
+            return RR_ERROR;
+        }
+        target->cluster_mode = val;
     } else {
         snprintf(errbuf, errbuflen-1, "invalid parameter '%s'", keyword);
         return RR_ERROR;
@@ -324,6 +331,10 @@ void handleConfigGet(RedisModuleCtx *ctx, RedisRaftConfig *config, RedisModuleSt
     if (stringmatch(pattern, "loglevel", 1)) {
         len++;
         replyConfigStr(ctx, "loglevel", getLoglevelName(redis_raft_loglevel));
+    }
+    if (stringmatch(pattern, "cluster-mode", 1)) {
+        len++;
+        replyConfigBool(ctx, "cluster-mode", config->cluster_mode);
     }
     RedisModule_ReplySetArrayLength(ctx, len * 2);
 }

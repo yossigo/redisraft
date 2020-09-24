@@ -238,6 +238,8 @@ typedef struct RedisRaftConfig {
     unsigned long raft_log_max_cache_size;
     unsigned long raft_log_max_file_size;
     bool raft_log_fsync;
+    /* Cluster mode */
+    bool cluster_mode;          /* Are we running in a cluster compatible mode? */
 } RedisRaftConfig;
 
 typedef void (*NodeConnectCallbackFunc)(const redisAsyncContext *, int);
@@ -578,5 +580,8 @@ void archiveSnapshot(RedisRaftCtx *rr);
 
 /* proxy.c */
 RRStatus ProxyCommand(RedisRaftCtx *rr, RaftReq *req, Node *leader);
+
+/* cluster.c */
+void handleClusterCommand(RedisRaftCtx *rr, RaftReq *req);
 
 #endif  /* _REDISRAFT_H */

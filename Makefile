@@ -40,7 +40,8 @@ OBJECTS = \
 	  snapshot.o \
 	  log.o \
 	  proxy.o \
-	  serialization.o
+	  serialization.o \
+	  cluster.o
 
 ifeq ($(COVERAGE),1)
 CFLAGS += -fprofile-arcs -ftest-coverage
