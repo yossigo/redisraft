@@ -49,6 +49,14 @@ static void addClusterSlotsReply(RedisRaftCtx *rr, RaftReq *req)
     int i;
     int alen;
 
+    /* Make sure we have a leader, or return a -CLUSTERDOWN message */
+    raft_node_t *leader_node = raft_get_current_leader_node(rr->raft);
+    if (!leader_node) {
+        RedisModule_ReplyWithError(req->ctx,
+                "CLUSTERDOWN No raft leader");
+        return;
+    }
+
     /* FIXME currently not handling partitioning, so we assume we
      * own all hash slots.
      */
@@ -62,7 +70,7 @@ static void addClusterSlotsReply(RedisRaftCtx *rr, RaftReq *req)
     RedisModule_ReplyWithLongLong(req->ctx, 16383); /* End slot */
 
     alen = 2;
-    alen += addClusterSlotNodeReply(rr, req->ctx, raft_get_current_leader_node(rr->raft));
+    alen += addClusterSlotNodeReply(rr, req->ctx, leader_node);
     for (i = 0; i < raft_get_num_nodes(rr->raft); i++) {
         raft_node_t *raft_node = raft_get_node_from_idx(rr->raft, i);
         if (raft_node_get_id(raft_node) == raft_get_current_leader(rr->raft) ||
@@ -90,7 +98,7 @@ void handleClusterCommand(RedisRaftCtx *rr, RaftReq *req)
 
     if (cmd_len == 5 && !strncasecmp(cmd_str, "SLOTS", 5) && cmd->argc == 2) {
         addClusterSlotsReply(rr, req);
-        goto exit;        
+        goto exit;
     } else {
         RedisModule_ReplyWithError(req->ctx,
             "ERR Unknown subcommand ot wrong number of arguments.");
