@@ -98,7 +98,11 @@ RRStatus checkLeader(RedisRaftCtx *rr, RaftReq *req, Node **ret_leader)
 
             size_t reply_maxlen = strlen(leader_node->addr.host) + 15;
             char *reply = RedisModule_Alloc(reply_maxlen);
-            snprintf(reply, reply_maxlen, "MOVED %s:%u", leader_node->addr.host, leader_node->addr.port);
+            if (rr->config->cluster_mode) {
+                snprintf(reply, reply_maxlen, "MOVED %d %s:%u", 0, leader_node->addr.host, leader_node->addr.port);
+            } else {
+                snprintf(reply, reply_maxlen, "MOVED %s:%u", leader_node->addr.host, leader_node->addr.port);
+            }
             RedisModule_ReplyWithError(req->ctx, reply);
             RedisModule_Free(reply);
         } else {
