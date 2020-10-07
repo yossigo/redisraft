@@ -73,6 +73,17 @@ void replyRaftError(RedisModuleCtx *ctx, int error)
     }
 }
 
+/* Create a -MOVED reply.
+ *
+ * Depending on cluster_mode, we produce a Redis Cluster compatible or old-style
+ * reply. TODO: Consider always using Redis Cluser compatible replies.
+ *
+ * One anomaly here is that may redirect a client to the leader even for commands
+ * that have no keys (hash_slot is -1), which is something Redis Cluster never does.
+ *
+ * In this case we return an arbitrary (0) hash slot, but we still need to consider
+ * how this impacts clients which may not expect it.
+ */
 void replyRedirect(RedisRaftCtx *rr, RaftReq *req, NodeAddr *addr)
 {
     size_t reply_maxlen = strlen(addr->host) + 40;
