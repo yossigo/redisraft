@@ -54,7 +54,10 @@ static RRStatus processConfigParam(const char *keyword, const char *value,
         RedisRaftConfig *target, bool on_init, char *errbuf, int errbuflen)
 {
     /* Parameters we don't accept as config set */
-    if (!on_init && (!strcmp(keyword, "id") || !strcmp(keyword, "raft-log-filename"))) {
+    if (!on_init && (!strcmp(keyword, "id") ||
+                !strcmp(keyword, "raft-log-filename") ||
+                !strcmp(keyword, "cluster-start-hslot") ||
+                !strcmp(keyword, "cluster-end-hslot"))) {
         snprintf(errbuf, errbuflen-1, "'%s' only supported at load time", keyword);
         return RR_ERROR;
     }
@@ -186,6 +189,22 @@ static RRStatus processConfigParam(const char *keyword, const char *value,
             return RR_ERROR;
         }
         target->cluster_mode = val;
+    } else if (!strcmp(keyword, "cluster-start-hslot")) {
+        char *errptr;
+        unsigned long val = strtoul(value, &errptr, 10);
+        if (*errptr != '\0' || val < 0 || val > 16383) {
+            snprintf(errbuf, errbuflen-1, "invalid 'cluster-start-hslot' value");
+            return RR_ERROR;
+        }
+        target->cluster_start_hslot = (int)val;
+    } else if (!strcmp(keyword, "cluster-end-hslot")) {
+        char *errptr;
+        unsigned long val = strtoul(value, &errptr, 10);
+        if (*errptr != '\0' || val < 0 || val > 16383) {
+            snprintf(errbuf, errbuflen-1, "invalid 'cluster-end-hslot' value");
+            return RR_ERROR;
+        }
+        target->cluster_end_hslot = (int)val;
     } else {
         snprintf(errbuf, errbuflen-1, "invalid parameter '%s'", keyword);
         return RR_ERROR;
@@ -336,6 +355,14 @@ void handleConfigGet(RedisModuleCtx *ctx, RedisRaftConfig *config, RedisModuleSt
         len++;
         replyConfigBool(ctx, "cluster-mode", config->cluster_mode);
     }
+    if (stringmatch(pattern, "cluster-start-hslot", 1)) {
+        len++;
+        replyConfigInt(ctx, "cluster-start-hslot", config->cluster_start_hslot);
+    }
+    if (stringmatch(pattern, "cluster-end-hslot", 1)) {
+        len++;
+        replyConfigInt(ctx, "cluster-end-hslot", config->cluster_end_hslot);
+    }
     RedisModule_ReplySetArrayLength(ctx, len * 2);
 }
 
@@ -355,7 +382,11 @@ void ConfigInit(RedisModuleCtx *ctx, RedisRaftConfig *config)
     config->raft_log_fsync = true;
     config->quorum_reads = true;
     config->raftize_all_commands = true;
+    config->cluster_mode = false;
+    config->cluster_start_hslot = 0;
+    config->cluster_end_hslot = 16383;
 }
+
 static RRStatus setRedisConfig(RedisModuleCtx *ctx, const char *param, const char *value)
 {
     size_t len;

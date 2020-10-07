@@ -102,6 +102,7 @@ struct RaftReq;
 struct EntryCache;
 struct RedisRaftConfig;
 struct Node;
+struct ShardingInfo;
 
 /* Node address specifier. */
 typedef struct node_addr {
@@ -196,6 +197,7 @@ typedef struct {
     int snapshot_child_fd;      /* Pipe connected to snapshot child process */
     RaftSnapshotInfo snapshot_info; /* Current snapshot info */
     RedisModuleCommandFilter *registered_filter;
+    struct ShardingInfo *sharding_info; /* Information about sharding, when cluster mode is enabled */
     /* General stats */
     unsigned long client_attached_entries;      /* Number of log entries attached to user connections */
     unsigned long long proxy_reqs;              /* Number of proxied requests */
@@ -240,6 +242,8 @@ typedef struct RedisRaftConfig {
     bool raft_log_fsync;
     /* Cluster mode */
     bool cluster_mode;          /* Are we running in a cluster compatible mode? */
+    int cluster_start_hslot;    /* First cluster hash slot */
+    int cluster_end_hslot;      /* Last cluster hash slot */
 } RedisRaftConfig;
 
 typedef void (*NodeConnectCallbackFunc)(const redisAsyncContext *, int);
@@ -390,6 +394,7 @@ typedef struct RaftReq {
         } requestvote;
         struct {
             Node *proxy_node;
+            int hash_slot;
             RaftRedisCommandArray cmds;
             msg_entry_response_t response;
         } redis;
@@ -427,7 +432,6 @@ typedef struct RaftLog {
     FILE                *idxfile;
 } RaftLog;
 
-
 #define SNAPSHOT_RESULT_MAGIC    0x70616e73  /* "snap" */
 typedef struct SnapshotResult {
     int magic;
@@ -435,6 +439,24 @@ typedef struct SnapshotResult {
     char rdb_filename[256];
     char err[256];
 } SnapshotResult;
+
+typedef struct ShardGroupNode {
+    char node_id[41];
+    NodeAddr addr;
+} ShardGroupNode;
+
+typedef struct ShardGroup {
+    int start_slot;
+    int end_slot;
+    int nodes_num;
+    ShardGroupNode *nodes;
+} ShardGroup;
+
+typedef struct ShardingInfo {
+    int shard_groups_num;
+    ShardGroup *shard_groups;
+    int hash_slots_map[16384];
+} ShardingInfo;
 
 /* Command filtering re-entrancy counter handling.
  *
@@ -471,6 +493,7 @@ RRStatus checkLeader(RedisRaftCtx *rr, RaftReq *req, Node **ret_leader);
 RRStatus checkRaftNotLoading(RedisRaftCtx *rr, RaftReq *req);
 RRStatus checkRaftState(RedisRaftCtx *rr, RaftReq *req);
 RRStatus setRaftizeMode(RedisRaftCtx *rr, RedisModuleCtx *ctx, bool flag);
+void replyRedirect(RedisRaftCtx *rr, RaftReq *req, NodeAddr *addr);
 
 /* node.c */
 void NodeFree(Node *node);
@@ -582,6 +605,9 @@ void archiveSnapshot(RedisRaftCtx *rr);
 RRStatus ProxyCommand(RedisRaftCtx *rr, RaftReq *req, Node *leader);
 
 /* cluster.c */
+RRStatus computeHashSlot(RedisRaftCtx *rr, RaftReq *req);
 void handleClusterCommand(RedisRaftCtx *rr, RaftReq *req);
+RRStatus ShardingInfoInit(RedisRaftCtx *rr);
+void addShardGroupFromArgs(RedisRaftCtx *rr, RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
 #endif  /* _REDISRAFT_H */
