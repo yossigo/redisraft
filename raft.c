@@ -1615,6 +1615,15 @@ static bool handleInterceptedCommands(RedisRaftCtx *rr, RaftReq *req)
     return false;
 }
 
+/* When cluster_mode is enabled, handle clustering aspects before processing
+ * the request:
+ *
+ * 1. Compute hash slot of all associated keys and validate there's no cross-slot
+ *    violation.
+ * 2. Update the request's hash_slot for future refrence.
+ * 3. If the hash slot is associated with a foreign ShardGroup, perform a redirect.
+ * 4. If the hash slot is not mapped, produce a CLUSTERDOWN error.
+ */
 
 static RRStatus handleClustering(RedisRaftCtx *rr, RaftReq *req)
 {

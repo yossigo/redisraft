@@ -215,6 +215,18 @@ extern raft_log_impl_t RaftLogImpl;
 #define REDIS_RAFT_DEFAULT_LOG_MAX_CACHE_SIZE       8*1000*1000
 #define REDIS_RAFT_DEFAULT_LOG_MAX_FILE_SIZE        64*1000*1000
 
+#define REDIS_RAFT_HASH_SLOTS                       16384
+#define REDIS_RAFT_HASH_MIN_SLOT                    0
+#define REDIS_RAFT_HASH_MAX_SLOT                    16383
+
+#define REDIS_RAFT_VALID_HASH_SLOT(h)   \
+    ((h) >= REDIS_RAFT_HASH_MIN_SLOT && (h) <= REDIS_RAFT_HASH_MAX_SLOT)
+
+#define REDIS_RAFT_VALID_HASH_SLOT_RANGE(a, b) \
+    (REDIS_RAFT_VALID_HASH_SLOT(a) && \
+     REDIS_RAFT_VALID_HASH_SLOT(b) && \
+     (a) <= (b))
+
 typedef struct RedisRaftConfig {
     raft_node_id_t id;          /* Local node Id */
     NodeAddr addr;              /* Address of local node, if specified */
@@ -426,6 +438,7 @@ typedef struct RaftLog {
     FILE                *idxfile;
 } RaftLog;
 
+
 #define SNAPSHOT_RESULT_MAGIC    0x70616e73  /* "snap" */
 typedef struct SnapshotResult {
     int magic;
@@ -434,21 +447,35 @@ typedef struct SnapshotResult {
     char err[256];
 } SnapshotResult;
 
+/* Describes a node in a ShardGroup (foreign RedisRaft cluster). */
 typedef struct ShardGroupNode {
-    char node_id[41];
-    NodeAddr addr;
+    char node_id[41];           /* Combined dbid + node_id */
+    NodeAddr addr;              /* Node address and port */
 } ShardGroupNode;
 
+/* Describes a ShardGroup. A ShardGroup is a RedisRaft cluster that
+ * is assigned with a specific range of hash slots.
+ */
 typedef struct ShardGroup {
-    int start_slot;
-    int end_slot;
-    int nodes_num;
-    ShardGroupNode *nodes;
+    int start_slot;             /* First slot, inclusive */
+    int end_slot;               /* Last slot, inclusive */
+    int nodes_num;              /* Number of nodes listed */
+    ShardGroupNode *nodes;      /* Nodes array */
 } ShardGroup;
 
+/* Sharding information, used when cluster_mode is enabled and multiple
+ * RedisRaft clusters operate together to perform sharding.
+ */
 typedef struct ShardingInfo {
-    int shard_groups_num;
-    ShardGroup *shard_groups;
+    int shard_groups_num;       /* Number of shard groups */
+    ShardGroup *shard_groups;   /* Shard groups array */
+
+    /* Maps hash slots to ShardGroups indexes.
+     *
+     * Note that a one-based index into the shard_groups array is used,
+     * since a zero value indicates the slot is unassigned. The index
+     * should therefore be adjusted before refering the array.
+     */
     int hash_slots_map[16384];
 } ShardingInfo;
 

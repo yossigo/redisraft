@@ -192,7 +192,7 @@ static RRStatus processConfigParam(const char *keyword, const char *value,
     } else if (!strcmp(keyword, "cluster-start-hslot")) {
         char *errptr;
         unsigned long val = strtoul(value, &errptr, 10);
-        if (*errptr != '\0' || val < 0 || val > 16383) {
+        if (*errptr != '\0' || !REDIS_RAFT_VALID_HASH_SLOT(val)) {
             snprintf(errbuf, errbuflen-1, "invalid 'cluster-start-hslot' value");
             return RR_ERROR;
         }
@@ -200,7 +200,7 @@ static RRStatus processConfigParam(const char *keyword, const char *value,
     } else if (!strcmp(keyword, "cluster-end-hslot")) {
         char *errptr;
         unsigned long val = strtoul(value, &errptr, 10);
-        if (*errptr != '\0' || val < 0 || val > 16383) {
+        if (*errptr != '\0' || !REDIS_RAFT_VALID_HASH_SLOT(val)) {
             snprintf(errbuf, errbuflen-1, "invalid 'cluster-end-hslot' value");
             return RR_ERROR;
         }
@@ -383,8 +383,8 @@ void ConfigInit(RedisModuleCtx *ctx, RedisRaftConfig *config)
     config->quorum_reads = true;
     config->raftize_all_commands = true;
     config->cluster_mode = false;
-    config->cluster_start_hslot = 0;
-    config->cluster_end_hslot = 16383;
+    config->cluster_start_hslot = REDIS_RAFT_HASH_MIN_SLOT;
+    config->cluster_end_hslot = REDIS_RAFT_HASH_MAX_SLOT;
 }
 
 static RRStatus setRedisConfig(RedisModuleCtx *ctx, const char *param, const char *value)

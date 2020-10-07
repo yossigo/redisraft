@@ -47,13 +47,18 @@ unsigned int keyHashSlot(const char *key, int keylen) {
  * ShardingInfo Handling
  * -------------------------------------------------------------------------- */
 
-static RRStatus addShardGroup(RedisRaftCtx *rr, int start_slot, int end_slot, int num_nodes, ShardGroupNode *nodes)
+/* Add a new ShardGroup to the active ShardingInfo. The start and end slots are
+ * validated against hash slot confilicts.
+ */
+
+static RRStatus addShardGroup(RedisRaftCtx *rr, int start_slot, int end_slot, int num_nodes,
+        ShardGroupNode *nodes)
 {
     int i;
     ShardingInfo *si = rr->sharding_info;
 
     /* Verify all specified slots are available */
-    if (start_slot > end_slot || start_slot < 0 || end_slot > 16383)
+    if (!REDIS_RAFT_VALID_HASH_SLOT_RANGE(start_slot, end_slot))
         return RR_ERROR;
     for (i = start_slot; i <= end_slot; i++) {
         if (si->hash_slots_map[i] != 0)
@@ -77,6 +82,16 @@ static RRStatus addShardGroup(RedisRaftCtx *rr, int start_slot, int end_slot, in
     return RR_OK;
 }
 
+/* Parse a ShardGroup specification as passed directly to RAFT.CLUSTER ADDSHARDGROUP.
+ * Shard group syntax is as follows:
+ *
+ *  [start slot] [end slot] [node-uid node-addr:node-port] [node-uid node-addr:node-port...]
+ *
+ * !!! This is a temporary hack implemented just for demo/testing purposes. We should
+ * !!! replace this by a mechanism similar to RAFT.CLUSTER JOIN, where the user provides
+ * !!! host address and port to connect to and we periodically poll remote shardgroups
+ * !!! for their configuration.
+ */
 
 void addShardGroupFromArgs(RedisRaftCtx *rr, RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
 {
@@ -85,8 +100,7 @@ void addShardGroupFromArgs(RedisRaftCtx *rr, RedisModuleCtx *ctx, RedisModuleStr
 
     if (RedisModule_StringToLongLong(argv[0], &start_slot) != REDISMODULE_OK ||
             RedisModule_StringToLongLong(argv[1], &end_slot) != REDISMODULE_OK ||
-            start_slot < 0 || start_slot > 16383 ||
-            end_slot < 0 || end_slot > 16383 || start_slot > end_slot) {
+            !REDIS_RAFT_VALID_HASH_SLOT_RANGE(start_slot, end_slot)) {
         RedisModule_ReplyWithError(ctx, "ERR invalid slot range");
         return;
     }
@@ -125,12 +139,15 @@ void addShardGroupFromArgs(RedisRaftCtx *rr, RedisModuleCtx *ctx, RedisModuleStr
     RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
 
+/* Initialize ShardingInfo and add our local RedisRaft cluster as the first
+ * ShardGroup.
+ */
+
 RRStatus ShardingInfoInit(RedisRaftCtx *rr)
 {
     rr->sharding_info = RedisModule_Calloc(1, sizeof(ShardingInfo));
-    addShardGroup(rr, rr->config->cluster_start_hslot, rr->config->cluster_end_hslot, 0, NULL);
-
-    return RR_OK;
+    return addShardGroup(rr, rr->config->cluster_start_hslot,
+            rr->config->cluster_end_hslot, 0, NULL);
 }
 
 /* Issue a COMMAND GETKEYS command to fetch the list of keys addressed
@@ -138,7 +155,12 @@ RRStatus ShardingInfoInit(RedisRaftCtx *rr)
  *
  * TODO: This is a temporary inefficient work around until RM_GetCommandKeys
  * is accepted as an API function.
+ *
+ * We may want to keep it for a while after the Module API is available for
+ * compatibility with older versions of Redis, but emit a warning if we have
+ * to fall back to use it.
  */
+
 RedisModuleCallReply *getCommandKeys(RedisRaftCtx *rr, RaftRedisCommand *cmd)
 {
     RedisModuleString *getkeys = RedisModule_CreateString(rr->ctx, "GETKEYS", 7);
@@ -165,6 +187,7 @@ RedisModuleCallReply *getCommandKeys(RedisRaftCtx *rr, RaftRedisCommand *cmd)
 /* Compute the hash slot for a RaftRedisCommandArray list of commands and update
  * the entry.
  */
+
 RRStatus computeHashSlot(RedisRaftCtx *rr, RaftReq *req)
 {
     int i, j;
