@@ -73,6 +73,22 @@ void replyRaftError(RedisModuleCtx *ctx, int error)
     }
 }
 
+void replyRedirect(RedisRaftCtx *rr, RaftReq *req, NodeAddr *addr)
+{
+    size_t reply_maxlen = strlen(addr->host) + 40;
+    char *reply = RedisModule_Alloc(reply_maxlen);
+    int slot = 0;
+    if (req->type == RR_REDISCOMMAND && req->r.redis.hash_slot != -1)
+        slot = req->r.redis.hash_slot;
+    if (rr->config->cluster_mode) {
+        snprintf(reply, reply_maxlen, "MOVED %d %s:%u", slot, addr->host, addr->port);
+    } else {
+        snprintf(reply, reply_maxlen, "MOVED %s:%u", addr->host, addr->port);
+    }
+    RedisModule_ReplyWithError(req->ctx, reply);
+    RedisModule_Free(reply);
+}
+
 /* Check that this node is a Raft leader.  If not, reply with -MOVED and
  * return an error.
  */
@@ -96,15 +112,7 @@ RRStatus checkLeader(RedisRaftCtx *rr, RaftReq *req, Node **ret_leader)
                 return RR_OK;
             }
 
-            size_t reply_maxlen = strlen(leader_node->addr.host) + 15;
-            char *reply = RedisModule_Alloc(reply_maxlen);
-            if (rr->config->cluster_mode) {
-                snprintf(reply, reply_maxlen, "MOVED %d %s:%u", 0, leader_node->addr.host, leader_node->addr.port);
-            } else {
-                snprintf(reply, reply_maxlen, "MOVED %s:%u", leader_node->addr.host, leader_node->addr.port);
-            }
-            RedisModule_ReplyWithError(req->ctx, reply);
-            RedisModule_Free(reply);
+            replyRedirect(rr, req, &leader_node->addr);
         } else {
             RedisModule_ReplyWithError(req->ctx,
                     rr->config->cluster_mode ? err_clusterdown : err_noleader);

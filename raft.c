@@ -1102,6 +1102,11 @@ RRStatus RedisRaftInit(RedisModuleCtx *ctx, RedisRaftCtx *rr, RedisRaftConfig *c
         PANIC("Raft initialization failed: invalid Redis configuration!");
     }
 
+    /* Cluster configuration */
+    if (rr->config->cluster_mode && ShardingInfoInit(rr) == RR_ERROR) {
+        PANIC("Raft initialization failed: invalid sharding configuration!");
+    }
+
     /* Raft log exists -> go into RAFT_LOADING state:
      *
      * Redis will load RDB as a snapshot, if it exists. When done,
@@ -1610,6 +1615,33 @@ static bool handleInterceptedCommands(RedisRaftCtx *rr, RaftReq *req)
     return false;
 }
 
+
+static RRStatus handleClustering(RedisRaftCtx *rr, RaftReq *req)
+{
+    if (computeHashSlot(rr, req) != RR_OK) {
+        RedisModule_ReplyWithError(req->ctx, "CROSSSLOT Keys in request don't hash to the same slot");
+        return RR_ERROR;
+    }
+
+    /* If command has no keys, continue */
+    if (req->r.redis.hash_slot == -1) return RR_OK;
+
+    /* Make sure hash slot is mapped and handled locally. */
+    int sgid = rr->sharding_info->hash_slots_map[req->r.redis.hash_slot];
+    if (!sgid) {
+        RedisModule_ReplyWithError(req->ctx, "CLUSTERDOWN Hash slot is not served");
+        return RR_ERROR;
+    }
+
+    if (sgid != 1) {
+        ShardGroup *sg = &rr->sharding_info->shard_groups[sgid-1];
+        replyRedirect(rr, req, &sg->nodes[0].addr);
+        return RR_ERROR;
+    }
+
+    return RR_OK;
+}
+
 static void handleRedisCommand(RedisRaftCtx *rr,RaftReq *req)
 {
     Node *leader_proxy = NULL;
@@ -1663,6 +1695,13 @@ static void handleRedisCommand(RedisRaftCtx *rr,RaftReq *req)
             goto exit;
         }
         return;
+    }
+
+    /* When we're in cluster mode, go through handleClustering. This will perform
+     * hash slot validation and return an error / redirection if necessary.
+     */
+    if (rr->config->cluster_mode && handleClustering(rr, req) != RR_OK) {
+        goto exit;
     }
 
     /* If command is read only we don't push it to the log, but queue it
