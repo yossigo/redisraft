@@ -82,7 +82,7 @@ static RRStatus addShardGroup(RedisRaftCtx *rr, int start_slot, int end_slot, in
     return RR_OK;
 }
 
-/* Parse a ShardGroup specification as passed directly to RAFT.CLUSTER ADDSHARDGROUP.
+/* Parse a ShardGroup specification as passed directly to RAFT.SHARDGROUP ADD.
  * Shard group syntax is as follows:
  *
  *  [start slot] [end slot] [node-uid node-addr:node-port] [node-uid node-addr:node-port...]
@@ -114,7 +114,7 @@ void addShardGroupFromArgs(RedisRaftCtx *rr, RedisModuleCtx *ctx, RedisModuleStr
     ShardGroupNode sg_nodes[num_nodes];
     for (i = 0; i < num_nodes; i++) {
         size_t len;
-        const char *str = RedisModule_StringPtrLen(argv[2 + i], &len);
+        const char *str = RedisModule_StringPtrLen(argv[2+(i*2)], &len);
 
         if (len != 40) {
             RedisModule_ReplyWithError(ctx, "ERR invalid node id length");
@@ -124,7 +124,7 @@ void addShardGroupFromArgs(RedisRaftCtx *rr, RedisModuleCtx *ctx, RedisModuleStr
         memcpy(sg_nodes[i].node_id, str, len);
         sg_nodes[i].node_id[len] = '\0';
 
-        str = RedisModule_StringPtrLen(argv[3 + i], &len);
+        str = RedisModule_StringPtrLen(argv[3+(i*2)], &len);
         if (!NodeAddrParse(str, len, &sg_nodes[i].addr)) {
             RedisModule_ReplyWithError(ctx, "ERR invalid node address/port");
             return;
