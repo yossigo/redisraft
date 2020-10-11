@@ -101,7 +101,7 @@ case "$1" in
     create)
         create
         ;;
-    default)
+    *)
         echo "Usage: $0 [setup|clean]"
         echo "setup     -- Set up the shard groups environment"
         echo "start     -- Start all shard group clusters"
