@@ -4,6 +4,7 @@ REDIS_PATH="${PWD}/../../../redis/src"
 REDISRAFT="${PWD}/../../redisraft.so"
 CREATE_CLUSTER_SCRIPT="${PWD}/../create-cluster/create-cluster"
 NUM_GROUPS=3
+ADDITIONAL_OPTIONS=
 
 # You may want to put the above config parameters into config.sh in order to
 # override the defaults without modifying this script.
@@ -39,7 +40,7 @@ REDIS_PATH=${REDIS_PATH}
 REDISRAFT=${REDISRAFT}
 PORT=5${group}00
 CLUSTER_MODE=yes
-ADDITIONAL_OPTIONS="$(calc_hash_slot_config $NUM_GROUPS $group)"
+ADDITIONAL_OPTIONS="$(calc_hash_slot_config $NUM_GROUPS $group) ${ADDITIONAL_OPTIONS}"
 _END_
         group=$((group + 1))
     done
