@@ -1,17 +1,11 @@
 Cluster Mode/Sharding Issues
 ============================
 
-## Protocol compatibility
+## ShardGroup Nodes Round-Robin
 
-Need to decide if we adopt Redis Cluster as the standard protocol for RedisRaft
-and always stick to it.
-
-Pros:
-- It's standard
-
-Cons:
-- Cannot use more descriptive errors like `-NOLEADER`
-- Ambiguous hash slot in `-MOVED <slot> <host:port>` replies.
+Currently we always reply with a `-MOVED` pointing to the first node of the
+target shard group. Ideally we should round-robin so in case the first node died
+clients will still eventually find a different node.
 
 ## ShardGroup Convergence and Persistence
 
@@ -34,8 +28,15 @@ There is already a `RAFT.SHARDGROUP GET` command so it could be as simple as:
 - It sends a `RAFT.SHARDGROUP GET` request and updates the local configuration
   if anything changed (i.e. new / removed nodes).
 
-## ShardGroup Nodes Round-Robin
+## Protocol compatibility
 
-Currently we always reply with a `-MOVED` pointing to the first node of the
-target shard group. Ideally we should round-robin so in case the first node died
-clients will still eventually find a different node.
+Need to decide if we adopt Redis Cluster as the standard protocol for RedisRaft
+and always stick to it.
+
+Pros:
+- It's standard
+
+Cons:
+- Cannot use more descriptive errors like `-NOLEADER`
+- Ambiguous hash slot in `-MOVED <slot> <host:port>` replies.
+
