@@ -135,7 +135,8 @@ typedef struct SnapshotCfgEntry {
     struct SnapshotCfgEntry *next;
 } SnapshotCfgEntry;
 
-#define RAFT_DBID_LEN   32
+#define RAFT_DBID_LEN               32
+#define RAFT_SHARDGROUP_NODEID_LEN  40
 
 /* Snapshot metadata.  There is a single instance of this struct available at all times,
  * which is accessed as follows:
@@ -368,11 +369,13 @@ typedef struct ShardGroupNode {
  * is assigned with a specific range of hash slots.
  */
 typedef struct ShardGroup {
-    int start_slot;             /* First slot, inclusive */
-    int end_slot;               /* Last slot, inclusive */
-    int nodes_num;              /* Number of nodes listed */
+    unsigned int start_slot;             /* First slot, inclusive */
+    unsigned int end_slot;               /* Last slot, inclusive */
+    unsigned int nodes_num;              /* Number of nodes listed */
     ShardGroupNode *nodes;      /* Nodes array */
 } ShardGroup;
+
+#define RAFT_LOGTYPE_ADD_SHARDGROUP     (RAFT_LOGTYPE_NUM+1)
 
 /* Sharding information, used when cluster_mode is enabled and multiple
  * RedisRaft clusters operate together to perform sharding.
@@ -628,6 +631,8 @@ void archiveSnapshot(RedisRaftCtx *rr);
 RRStatus ProxyCommand(RedisRaftCtx *rr, RaftReq *req, Node *leader);
 
 /* cluster.c */
+char *ShardGroupSerialize(ShardGroup *sg);
+RRStatus ShardGroupDeserialize(const char *buf, size_t buf_len, ShardGroup *sg);
 RRStatus computeHashSlot(RedisRaftCtx *rr, RaftReq *req);
 void handleClusterCommand(RedisRaftCtx *rr, RaftReq *req);
 RRStatus ShardingInfoInit(RedisRaftCtx *rr);
