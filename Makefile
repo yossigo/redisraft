@@ -114,13 +114,15 @@ unit-lcov-report: tests/lcov.info
 
 # ----------------------------- Integration Tests -----------------------------
 
+PYTEST_OPTS ?= -v
+
 .PHONY: integration-tests
 integration-tests:
-	pytest tests/integration -v
+	pytest tests/integration $(PYTEST_OPTS)
 
 .PHONY: valgrind-tests
 valgrind-tests:
-	pytest tests/integration -v --valgrind
+	pytest tests/integration $(PYTEST_OPTS) --valgrind
 
 .PHONY: integration-lcov-report
 integration-lcov-report:
