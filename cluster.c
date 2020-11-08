@@ -61,7 +61,7 @@ unsigned int keyHashSlot(const char *key, int keylen) {
  */
 char *ShardGroupSerialize(ShardGroup *sg)
 {
-    size_t buf_size = 80 + (80 + sizeof(ShardGroupNode)) * sg->nodes_num; /* Over estimated */
+    size_t buf_size = SHARDGROUP_MAXLEN + (SHARDGROUPNODE_MAXLEN * sg->nodes_num) + 1;
     char *buf = RedisModule_Calloc(1, buf_size);
     char *p = buf;
 
@@ -329,7 +329,6 @@ RRStatus ShardingInfoAddShardGroup(RedisRaftCtx *rr, ShardGroup *new_sg)
 RRStatus ShardGroupParse(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, ShardGroup *sg)
 {
     long long start_slot, end_slot;
-    int i;
 
     memset(sg, 0, sizeof(*sg));
 
@@ -347,15 +346,16 @@ RRStatus ShardGroupParse(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         RedisModule_WrongArity(ctx);
         goto error;
     }
+    int argidx = 2; /* Next arg to consume */
 
     /* Parse nodes */
     sg->start_slot = start_slot;
     sg->end_slot = end_slot;
     sg->nodes_num = num_nodes;
     sg->nodes = RedisModule_Alloc(sizeof(ShardGroupNode) * num_nodes);
-    for (i = 0; i < num_nodes; i++) {
+    for (int i = 0; i < num_nodes; i++) {
         size_t len;
-        const char *str = RedisModule_StringPtrLen(argv[2+(i*2)], &len);
+        const char *str = RedisModule_StringPtrLen(argv[argidx++], &len);
 
         if (len != RAFT_SHARDGROUP_NODEID_LEN) {
             RedisModule_ReplyWithError(ctx, "ERR invalid node id length");
@@ -365,7 +365,7 @@ RRStatus ShardGroupParse(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         memcpy(sg->nodes[i].node_id, str, len);
         sg->nodes[i].node_id[len] = '\0';
 
-        str = RedisModule_StringPtrLen(argv[3+(i*2)], &len);
+        str = RedisModule_StringPtrLen(argv[argidx++], &len);
         if (!NodeAddrParse(str, len, &sg->nodes[i].addr)) {
             RedisModule_ReplyWithError(ctx, "ERR invalid node address/port");
             goto error;
