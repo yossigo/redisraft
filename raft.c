@@ -118,7 +118,7 @@ static void populateReadonlyCommandDict(RedisModuleCtx *ctx)
 /* ------------------------------------ Common helpers ------------------------------------ */
 
 /* Set up a Raft log entry with an attached RaftReq. We use this when a user command provided
- * in a RaftReq should keep the client blockde until the log entry is committed and applied.
+ * in a RaftReq should keep the client blocked until the log entry is committed and applied.
  */
 
 static void entryFreeAttachedRaftReq(raft_entry_t *ety)

@@ -105,6 +105,9 @@ struct Node;
 struct ShardingInfo;
 struct ShardGroup;
 
+/* Longest length of a NodeAddr string, including null terminator */
+#define NODEADDR_MAXLEN      (255 + 1 + 5 + 1)
+
 /* Node address specifier. */
 typedef struct node_addr {
     uint16_t port;
@@ -365,11 +368,18 @@ typedef struct {
     RaftRedisCommand **commands;
 } RaftRedisCommandArray;
 
+/* Max length of a ShardGroupNode string, including newline and null terminator */
+#define SHARDGROUPNODE_MAXLEN   (RAFT_SHARDGROUP_NODEID_LEN+1 + NODEADDR_MAXLEN + 2)
+
 /* Describes a node in a ShardGroup (foreign RedisRaft cluster). */
 typedef struct ShardGroupNode {
     char node_id[RAFT_SHARDGROUP_NODEID_LEN+1]; /* Combined dbid + node_id */
     NodeAddr addr;                              /* Node address and port */
 } ShardGroupNode;
+
+/* Max length of a ShardGroup string, including newline and null terminator
+ * but excluding nodes */
+#define SHARDGROUP_MAXLEN       (10 + 1 + 10 + 1 + 10 + 1 + 1)
 
 /* Describes a ShardGroup. A ShardGroup is a RedisRaft cluster that
  * is assigned with a specific range of hash slots.
