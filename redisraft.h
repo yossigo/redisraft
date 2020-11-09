@@ -224,13 +224,16 @@ extern raft_log_impl_t RaftLogImpl;
 #define REDIS_RAFT_HASH_MIN_SLOT                    0
 #define REDIS_RAFT_HASH_MAX_SLOT                    16383
 
-#define REDIS_RAFT_VALID_HASH_SLOT(h)   \
-    ((h) >= REDIS_RAFT_HASH_MIN_SLOT && (h) <= REDIS_RAFT_HASH_MAX_SLOT)
+static inline bool HashSlotValid(int slot)
+{
+    return (slot >= REDIS_RAFT_HASH_MIN_SLOT && slot <= REDIS_RAFT_HASH_MAX_SLOT);
+}
 
-#define REDIS_RAFT_VALID_HASH_SLOT_RANGE(a, b) \
-    (REDIS_RAFT_VALID_HASH_SLOT(a) && \
-     REDIS_RAFT_VALID_HASH_SLOT(b) && \
-     (a) <= (b))
+static inline bool HashSlotRangeValid(int start_slot, int end_slot)
+{
+    return (HashSlotValid(start_slot) && HashSlotValid(end_slot) &&
+            start_slot <= end_slot);
+}
 
 typedef struct RedisRaftConfig {
     raft_node_id_t id;          /* Local node Id */

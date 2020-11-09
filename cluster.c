@@ -269,7 +269,7 @@ RRStatus ShardingInfoValidateShardGroup(RedisRaftCtx *rr, ShardGroup *new_sg)
     ShardingInfo *si = rr->sharding_info;
 
     /* Verify all specified slots are available */
-    if (!REDIS_RAFT_VALID_HASH_SLOT_RANGE(new_sg->start_slot, new_sg->end_slot)) {
+    if (!HashSlotRangeValid(new_sg->start_slot, new_sg->end_slot)) {
         LOG_ERROR("Invalid shardgroup: bad slots range %u-%u",
                 new_sg->start_slot, new_sg->end_slot);
         return RR_ERROR;
@@ -334,7 +334,7 @@ RRStatus ShardGroupParse(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     /* Slot range */
     if (RedisModule_StringToLongLong(argv[0], &start_slot) != REDISMODULE_OK ||
             RedisModule_StringToLongLong(argv[1], &end_slot) != REDISMODULE_OK ||
-            !REDIS_RAFT_VALID_HASH_SLOT_RANGE(start_slot, end_slot)) {
+            !HashSlotRangeValid(start_slot, end_slot)) {
         RedisModule_ReplyWithError(ctx, "ERR invalid slot range");
         goto error;
     }
