@@ -2157,7 +2157,6 @@ exit:
 void handleShardGroupGet(RedisRaftCtx *rr, RaftReq *req)
 {
     int alen;
-    int i;
 
     RedisModule_ReplyWithArray(req->ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
 
@@ -2165,7 +2164,7 @@ void handleShardGroupGet(RedisRaftCtx *rr, RaftReq *req)
     RedisModule_ReplyWithLongLong(req->ctx, rr->config->cluster_end_hslot);
     alen = 2;
 
-    for (i = 0; i < raft_get_num_nodes(rr->raft); i++) {
+    for (int i = 0; i < raft_get_num_nodes(rr->raft); i++) {
         raft_node_t *raft_node = raft_get_node_from_idx(rr->raft, i);
         if (!raft_node_is_active(raft_node))
             continue;
