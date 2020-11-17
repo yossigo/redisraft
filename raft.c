@@ -916,6 +916,7 @@ static void callHandleNodeStates(uv_timer_t *handle)
         return;
     }
 
+    HandleIdleConnections(rr);
     HandleNodeStates(rr);
 }
 
@@ -1939,14 +1940,11 @@ static void handleClusterJoin(RedisRaftCtx *rr, RaftReq *req)
         goto exit;
     }
 
-    assert(!rr->join_state);
-    rr->join_state = RedisModule_Calloc(1, sizeof(RaftJoinState));
-
-    rr->join_state->addr = req->r.cluster_join.addr;
-    req->r.cluster_join.addr = NULL;    /* We now own it in join_state! */
-
     /* Create a Snapshot Info meta-key */
     initializeSnapshotInfo(rr);
+
+    /* Initiate cluster join */
+    InitiateJoinCluster(rr, req->r.cluster_join.addr);
 
     rr->state = REDIS_RAFT_JOINING;
     RedisModule_ReplyWithSimpleString(req->ctx, "OK");

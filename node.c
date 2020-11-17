@@ -14,7 +14,21 @@
 
 #include <assert.h>
 
+/* State of the RAFT.CLUSTER JOIN operation.
+ *
+ * The address list is initialized by RAFT.CLUSTER JOIN, but it may grow if RAFT.NODE ADD
+ * requests are sent to follower nodes that reply -MOVED.
+ *
+ * We use a fake Node structure to simplify and reuse connection management code.
+ */
+
 static LIST_HEAD(node_list, Node) node_list = LIST_HEAD_INITIALIZER(node_list);
+
+typedef struct JoinState {
+    NodeAddrListElement *addr;
+    NodeAddrListElement *addr_iter;
+    Connection *conn;
+} JoinState;
 
 const char *NodeStateStr[] = {
     "disconnected",
@@ -269,7 +283,7 @@ bool NodeAddrParse(const char *node_addr, size_t node_addr_len, NodeAddr *result
 }
 
 /* Compare two NodeAddr sructs */
-bool NodeAddrEqual(NodeAddr *a1, NodeAddr *a2)
+bool NodeAddrEqual(const NodeAddr *a1, const NodeAddr *a2)
 {
     return (a1->port == a2->port && !strcmp(a1->host, a2->host));
 }
@@ -278,7 +292,7 @@ bool NodeAddrEqual(NodeAddr *a1, NodeAddr *a2)
  * address already exists, nothing is done.  The addr pointer provided is copied into newly
  * allocated memory, caller should free addr if necessary.
  */
-void NodeAddrListAddElement(NodeAddrListElement **head, NodeAddr *addr)
+void NodeAddrListAddElement(NodeAddrListElement **head, const NodeAddr *addr)
 {
     while (*head != NULL) {
         if (NodeAddrEqual(&(*head)->addr, addr)) {
@@ -290,6 +304,17 @@ void NodeAddrListAddElement(NodeAddrListElement **head, NodeAddr *addr)
 
     *head = RedisModule_Calloc(1, sizeof(NodeAddrListElement));
     (*head)->addr = *addr;
+}
+
+/* Concat a NodeAddrList to another NodeAddrList */
+void NodeAddrListConcat(NodeAddrListElement **head, const NodeAddrListElement *other)
+{
+    const NodeAddrListElement *e = other;
+
+    while (e != NULL) {
+        NodeAddrListAddElement(head, &e->addr);
+        e = e->next;
+    }
 }
 
 void NodeAddrListFree(NodeAddrListElement *head)
@@ -326,8 +351,9 @@ static bool parseMovedReply(const char *str, NodeAddr *addr)
 
 void handleNodeAddResponse(redisAsyncContext *c, void *r, void *privdata)
 {
-    Node *node = privdata;
-    RedisRaftCtx *rr = node->rr;
+    Connection *conn = privdata;
+    JoinState *state = ConnGetPrivateData(conn);
+    RedisRaftCtx *rr = ConnGetRedisRaftCtx(conn);
 
     redisReply *reply = r;
 
@@ -341,7 +367,7 @@ void handleNodeAddResponse(redisAsyncContext *c, void *r, void *privdata)
                 LOG_ERROR("RAFT.NODE ADD failed: invalid MOVED response: %s\n", reply->str);
             } else {
                 LOG_VERBOSE("Join redirected to leader: %s:%d\n", addr.host, addr.port);
-                NodeAddrListAddElement(&rr->join_state->addr, &addr);
+                NodeAddrListAddElement(&state->addr, &addr);
             }
         } else {
             LOG_ERROR("RAFT.NODE ADD failed: %s\n", reply->str);
@@ -359,59 +385,37 @@ void handleNodeAddResponse(redisAsyncContext *c, void *r, void *privdata)
         rr->config->id = reply->element[0]->integer;
 
         HandleClusterJoinCompleted(rr);
-    }
+        assert(rr->state == REDIS_RAFT_UP);
 
-    if (rr->state != REDIS_RAFT_UP) {
-        /* TODO: Throttle failed attempts, especially if server returned an error... */
-        node->state = NODE_CONNECT_ERROR;
+        NodeAddrListFree(state->addr);
+        RedisModule_Free(state);
+
+        ConnAsyncTerminate(conn);
     }
 
     redisAsyncDisconnect(c);
 }
 
 
-void sendNodeAddRequest(const redisAsyncContext *c, int status)
+void sendNodeAddRequest(Connection *conn)
 {
-    Node *node = (Node *) c->data;
-    RedisRaftCtx *rr = node->rr;
+    RedisRaftCtx *rr = ConnGetRedisRaftCtx(conn);
 
     /* Connection is not good?  Terminate and continue */
-    if (status != REDIS_OK) {
-        node->state = NODE_CONNECT_ERROR;
-    } else if (redisAsyncCommand(node->rc, handleNodeAddResponse, node,
+    if (!ConnIsConnected(conn)) {
+        return;
+    }
+
+    if (redisAsyncCommand(ConnGetRedisCtx(conn), handleNodeAddResponse, conn,
         "RAFT.NODE %s %d %s:%u",
         "ADD",
         rr->config->id,
         rr->config->addr.host, rr->config->addr.port) != REDIS_OK) {
 
-        node->state = NODE_CONNECT_ERROR;
+        ConnAsyncTerminate(conn);
     }
 }
 
-static void initiateNodeAdd(RedisRaftCtx *rr)
-{
-    assert(rr->join_state != NULL);
-    assert(rr->join_state->addr != NULL);
-
-    /* Reset address iterator */
-    if (!rr->join_state->addr_iter) {
-        rr->join_state->addr_iter = rr->join_state->addr;
-    }
-
-    /* Allocate a node and initiate connection */
-    if (!rr->join_state->node) {
-        rr->join_state->node = NodeInit(0, &rr->join_state->addr->addr);
-    } else {
-        /* Try next address we have */
-        rr->join_state->addr_iter = rr->join_state->addr_iter->next;
-        if (!rr->join_state->addr_iter) {
-            rr->join_state->addr_iter = rr->join_state->addr;
-        }
-        rr->join_state->node->addr = rr->join_state->addr_iter->addr;
-    }
-
-    NodeConnect(rr->join_state->node, rr, sendNodeAddRequest);
-}
 
 /* Track a new pending response for a request that was sent to the node.
  * This is used to track connection liveness and decide when it should be
@@ -460,18 +464,6 @@ void NodeDismissPendingResponse(Node *node)
 
 void HandleNodeStates(RedisRaftCtx *rr)
 {
-
-    /* When in joining state, we don't have nodes to worry about but only the
-     * join_node synthetic node which establishes the initial connection.
-     */
-    if (rr->state == REDIS_RAFT_JOINING) {
-        assert(rr->join_state != NULL);
-        if (!rr->join_state->node || NODE_STATE_IDLE(rr->join_state->node->state)) {
-            initiateNodeAdd(rr);
-        }
-        return;
-    }
-
     if (rr->state == REDIS_RAFT_LOADING)
         return;
 
@@ -516,5 +508,38 @@ void HandleNodeStates(RedisRaftCtx *rr)
             }
         }
     }
+}
+
+void joinIdleCallback(Connection *conn)
+{
+    JoinState *state = ConnGetPrivateData(conn);
+
+    /* Advance iterator, wrap around to start */
+    if (state->addr_iter) {
+        state->addr_iter = state->addr_iter->next;
+    }
+    if (!state->addr_iter) {
+        state->addr_iter = state->addr;
+
+        /* FIXME: If we iterated through the entire list, we currently continue
+         * forever. This should be changed along with the change of configuration
+         * interface, so once we've exahusted all addresses we fail the
+         * join operation.
+         */
+    }
+
+    LOG_VERBOSE("Joining cluster, connecting to %s:%u\n", state->addr_iter->addr.host, state->addr_iter->addr.port);
+
+    /* Establish connection. We silently ignore errors here as we'll
+     * just get iterated again in the future.
+     */
+    ConnConnect(state->conn, &state->addr_iter->addr, sendNodeAddRequest);
+}
+
+void InitiateJoinCluster(RedisRaftCtx *rr, const NodeAddrListElement *addr)
+{
+    JoinState *state = RedisModule_Calloc(1, sizeof(*state));
+    state->conn = ConnCreate(rr, state, joinIdleCallback);
+    NodeAddrListConcat(&state->addr, addr);
 }
 

@@ -97,6 +97,8 @@ void raft_module_log(const char *fmt, ...);
 #define NODE_LOG_VERBOSE(node, fmt, ...) NODE_LOG(LOGLEVEL_VERBOSE, node, fmt, ##__VA_ARGS__)
 #define NODE_LOG_DEBUG(node, fmt, ...) NODE_LOG(LOGLEVEL_DEBUG, node, fmt, ##__VA_ARGS__)
 
+typedef struct Connection Connection;
+
 /* Forward declarations */
 struct RaftReq;
 struct EntryCache;
@@ -158,19 +160,6 @@ typedef struct RaftSnapshotInfo {
     SnapshotCfgEntry *cfg;
 } RaftSnapshotInfo;
 
-/* State of the RAFT.CLUSTER JOIN operation.
- *
- * The address list is initialized by RAFT.CLUSTER JOIN, but it may grow if RAFT.NODE ADD
- * requests are sent to follower nodes that reply -MOVED.
- *
- * We use a fake Node structure to simplify and reuse connection management code.
- */
-typedef struct RaftJoinState {
-    NodeAddrListElement *addr;
-    NodeAddrListElement *addr_iter;
-    struct Node *node;
-} RaftJoinState;
-
 /* Global Raft context */
 typedef struct {
     void *raft;                 /* Raft library context */
@@ -187,7 +176,6 @@ typedef struct {
     struct RaftLog *log;        /* Raft persistent log; May be NULL if not used */
     struct EntryCache *logcache;
     struct RedisRaftConfig *config;     /* User provided configuration */
-    RaftJoinState *join_state;  /* Tracks state while we're in REDIS_RAFT_JOINING */
     bool snapshot_in_progress;  /* Indicates we're creating a snapshot in the background */
     raft_index_t last_snapshot_idx;
     raft_term_t last_snapshot_term;
@@ -544,7 +532,7 @@ bool NodeConnect(Node *node, RedisRaftCtx *rr, NodeConnectCallbackFunc connect_c
 void NodeMarkDisconnected(Node *node);
 void NodeMarkRemoved(Node *node);
 bool NodeAddrParse(const char *node_addr, size_t node_addr_len, NodeAddr *result);
-void NodeAddrListAddElement(NodeAddrListElement **head, NodeAddr *addr);
+void NodeAddrListAddElement(NodeAddrListElement **head, const NodeAddr *addr);
 void NodeAddrListFree(NodeAddrListElement *head);
 void HandleNodeStates(RedisRaftCtx *rr);
 void NodeAddPendingResponse(Node *node, bool proxy);
@@ -643,6 +631,18 @@ void archiveSnapshot(RedisRaftCtx *rr);
 
 /* proxy.c */
 RRStatus ProxyCommand(RedisRaftCtx *rr, RaftReq *req, Node *leader);
+
+/* connection.c */
+typedef void (*ConnectionCallbackFunc)(struct Connection *conn);
+Connection *ConnCreate(RedisRaftCtx *rr, void *privdata, ConnectionCallbackFunc idle_cb);
+RRStatus ConnConnect(Connection *conn, const NodeAddr *addr, ConnectionCallbackFunc connect_callback);
+void ConnAsyncTerminate(Connection *conn);
+void HandleIdleConnections(RedisRaftCtx *rr);
+void *ConnGetPrivateData(Connection *conn);
+RedisRaftCtx *ConnGetRedisRaftCtx(Connection *conn);
+redisAsyncContext *ConnGetRedisCtx(Connection *conn);
+bool ConnIsIdle(Connection *conn);
+bool ConnIsConnected(Connection *conn);
 
 /* cluster.c */
 char *ShardGroupSerialize(ShardGroup *sg);
