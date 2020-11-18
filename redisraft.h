@@ -97,13 +97,25 @@ void raft_module_log(const char *fmt, ...);
 #define NODE_LOG_VERBOSE(node, fmt, ...) NODE_LOG(LOGLEVEL_VERBOSE, node, fmt, ##__VA_ARGS__)
 #define NODE_LOG_DEBUG(node, fmt, ...) NODE_LOG(LOGLEVEL_DEBUG, node, fmt, ##__VA_ARGS__)
 
-typedef struct Connection Connection;
+typedef enum ConnState {
+    CONN_DISCONNECTED,
+    CONN_RESOLVING,
+    CONN_CONNECTING,
+    CONN_CONNECTED,
+    CONN_CONNECT_ERROR
+} ConnState;
+
+typedef enum ConnFlags {
+    CONN_TERMINATING    = 1 << 0
+} ConnFlags;
+
 
 /* Forward declarations */
 struct RaftReq;
 struct EntryCache;
 struct RedisRaftConfig;
 struct Node;
+struct Connection;
 struct ShardingInfo;
 struct ShardGroup;
 
@@ -121,6 +133,39 @@ typedef struct NodeAddrListElement {
     NodeAddr addr;
     struct NodeAddrListElement *next;
 } NodeAddrListElement;
+
+typedef void (*ConnectionCallbackFunc)(struct Connection *conn);
+typedef void (*ConnectionFreeFunc)(void *privdata);
+
+/* A connection represents a single outgoing Redis connection, such as the
+ * one used to communicate with another node.
+ *
+ * Essentially it is a wrapper around a hiredis asyncRedisContext, providing
+ * additional capabilities such as handling asynchronous DNS resolution,
+ * dropped connections and re-connects, etc.
+ */
+
+typedef struct Connection {
+    unsigned long id;
+    ConnState state;
+    ConnFlags flags;
+    NodeAddr addr;
+    char ipaddr[INET6_ADDRSTRLEN+1];    /* Node's resolved IP */
+    redisAsyncContext *rc;              /* hiredis async context */
+    uv_getaddrinfo_t uv_resolver;       /* libuv resolver context */
+    struct RedisRaftCtx *rr;            /* Pointer back to redis_raft */
+    long long last_connected_time;      /* Last connection time */
+    unsigned int connect_oks;           /* Successful connects */
+    unsigned int connect_errors;        /* Connection errors since last connection */
+    void *privdata;
+
+    ConnectionCallbackFunc connect_callback;
+    ConnectionCallbackFunc idle_callback;
+    ConnectionFreeFunc free_callback;
+
+    /* Linkage to global connections list */
+    LIST_ENTRY(Connection) entries;
+} Connection;
 
 /* General state of the module */
 typedef enum RedisRaftState {
@@ -161,7 +206,7 @@ typedef struct RaftSnapshotInfo {
 } RaftSnapshotInfo;
 
 /* Global Raft context */
-typedef struct {
+typedef struct RedisRaftCtx {
     void *raft;                 /* Raft library context */
     RedisModuleCtx *ctx;        /* Redis module thread-safe context; only used to push commands
                                    we get from the leader. */
@@ -248,29 +293,6 @@ typedef struct RedisRaftConfig {
     int cluster_end_hslot;      /* Last cluster hash slot */
 } RedisRaftConfig;
 
-typedef void (*NodeConnectCallbackFunc)(const redisAsyncContext *, int);
-
-typedef enum NodeState {
-    NODE_DISCONNECTED,
-    NODE_RESOLVING,
-    NODE_CONNECTING,
-    NODE_CONNECTED,
-    NODE_CONNECT_ERROR
-} NodeState;
-
-extern const char *NodeStateStr[];
-
-typedef enum NodeFlags {
-    NODE_TERMINATING    = 1 << 0
-} NodeFlags;
-
-#define NODE_STATE_IDLE(x) \
-    ((x) == NODE_DISCONNECTED || \
-     (x) == NODE_CONNECT_ERROR)
-
-#define NODE_IS_CONNECTED(node) \
-    ((node->state == NODE_CONNECTED) && !(node->flags & NODE_TERMINATING))
-
 typedef struct PendingResponse {
     bool proxy;
     int id;
@@ -280,18 +302,10 @@ typedef struct PendingResponse {
 
 /* Maintains all state about peer nodes */
 typedef struct Node {
-    raft_node_id_t id;                  /* Raft unique node ID */
-    NodeState state;                    /* Node connection state */
-    NodeFlags flags;                    /* See: enum NodeFlags */
-    NodeAddr addr;                      /* Node's address */
-    char ipaddr[INET6_ADDRSTRLEN+1];    /* Node's resolved IP */
-    long long last_connected_time;      /* Last connection time */
-    unsigned int connect_oks;           /* Successful connects */
-    unsigned int connect_errors;        /* Connection errors since last connection */
-    redisAsyncContext *rc;              /* hiredis async context */
-    uv_getaddrinfo_t uv_resolver;       /* libuv resolver context */
-    RedisRaftCtx *rr;                   /* Pointer back to redis_raft */
-    NodeConnectCallbackFunc connect_callback;   /* Connection callback */
+    raft_node_id_t id;              /* Raft unique node ID */
+    RedisRaftCtx *rr;               /* RedisRaftCtx handle */
+    Connection *conn;               /* Connection to node */
+    NodeAddr addr;                  /* Node's address */
     bool load_snapshot_in_progress; /* Are we currently pushing a snapshot? */
     raft_index_t load_snapshot_idx; /* Index of snapshot we're pushing */
     time_t load_snapshot_last_time; /* Last time we pushed a snapshot */
@@ -527,16 +541,14 @@ void replyRedirect(RedisRaftCtx *rr, RaftReq *req, NodeAddr *addr);
 
 /* node.c */
 void NodeFree(Node *node);
-Node *NodeInit(int id, const NodeAddr *addr);
-bool NodeConnect(Node *node, RedisRaftCtx *rr, NodeConnectCallbackFunc connect_callback);
-void NodeMarkDisconnected(Node *node);
-void NodeMarkRemoved(Node *node);
+Node *NodeInit(RedisRaftCtx *rr, int id, const NodeAddr *addr);
 bool NodeAddrParse(const char *node_addr, size_t node_addr_len, NodeAddr *result);
 void NodeAddrListAddElement(NodeAddrListElement **head, const NodeAddr *addr);
 void NodeAddrListFree(NodeAddrListElement *head);
 void HandleNodeStates(RedisRaftCtx *rr);
 void NodeAddPendingResponse(Node *node, bool proxy);
 void NodeDismissPendingResponse(Node *node);
+void InitiateJoinCluster(RedisRaftCtx *rr, const NodeAddrListElement *addr);
 
 /* serialization.c */
 raft_entry_t *RaftRedisCommandArraySerialize(const RaftRedisCommandArray *source);
@@ -633,16 +645,17 @@ void archiveSnapshot(RedisRaftCtx *rr);
 RRStatus ProxyCommand(RedisRaftCtx *rr, RaftReq *req, Node *leader);
 
 /* connection.c */
-typedef void (*ConnectionCallbackFunc)(struct Connection *conn);
-Connection *ConnCreate(RedisRaftCtx *rr, void *privdata, ConnectionCallbackFunc idle_cb);
+Connection *ConnCreate(RedisRaftCtx *rr, void *privdata, ConnectionCallbackFunc idle_cb, ConnectionFreeFunc free_cb);
 RRStatus ConnConnect(Connection *conn, const NodeAddr *addr, ConnectionCallbackFunc connect_callback);
 void ConnAsyncTerminate(Connection *conn);
+void ConnMarkDisconnected(Connection *conn);
 void HandleIdleConnections(RedisRaftCtx *rr);
 void *ConnGetPrivateData(Connection *conn);
 RedisRaftCtx *ConnGetRedisRaftCtx(Connection *conn);
 redisAsyncContext *ConnGetRedisCtx(Connection *conn);
 bool ConnIsIdle(Connection *conn);
 bool ConnIsConnected(Connection *conn);
+const char *ConnGetStateStr(Connection *conn);
 
 /* cluster.c */
 char *ShardGroupSerialize(ShardGroup *sg);

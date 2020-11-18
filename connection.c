@@ -33,14 +33,6 @@
 #define CONN_TRACE(conn, fmt, ...) do {} while (0)
 #endif
 
-typedef enum ConnState {
-    CONN_DISCONNECTED,
-    CONN_RESOLVING,
-    CONN_CONNECTING,
-    CONN_CONNECTED,
-    CONN_CONNECT_ERROR
-} ConnState;
-
 static const char *ConnStateStr[] = {
     "disconnected",
     "resolving",
@@ -48,47 +40,6 @@ static const char *ConnStateStr[] = {
     "connected",
     "connect_error"
 };
-
-typedef enum ConnFlags {
-    CONN_TERMINATING    = 1 << 0
-} ConnFlags;
-
-typedef enum ConnCallbackStatus {
-    CONN_CALLBACK_CONNECTED,
-    CONN_CALLBACK_CONNECT_FAILED,
-    CONN_CALLBACK_
-} ConnCallbackStatus;
-
-struct Connection;  /* Forward declaration */
-
-/* A connection represents a single outgoing Redis connection, such as the
- * one used to communicate with another node.
- *
- * Essentially it is a wrapper around a hiredis asyncRedisContext, providing
- * additional capabilities such as handling asynchronous DNS resolution,
- * dropped connections and re-connects, etc.
- */
-
-typedef struct Connection {
-    unsigned long id;
-    ConnState state;
-    ConnFlags flags; 
-    NodeAddr addr;
-    char ipaddr[INET6_ADDRSTRLEN+1];    /* Node's resolved IP */
-    redisAsyncContext *rc;              /* hiredis async context */
-    uv_getaddrinfo_t uv_resolver;       /* libuv resolver context */
-    RedisRaftCtx *rr;                   /* Pointer back to redis_raft */
-    long long last_connected_time;      /* Last connection time */
-    unsigned int connect_oks;           /* Successful connects */
-    unsigned int connect_errors;        /* Connection errors since last connection */
-    void *privdata;
-
-    ConnectionCallbackFunc connect_callback;
-    ConnectionCallbackFunc idle_callback;
-
-    /* Linkage to global connections list */
-    LIST_ENTRY(Connection) entries;
-} Connection;
 
 /* A list of all connections */
 static LIST_HEAD(conn_list, Connection) conn_list = LIST_HEAD_INITIALIZER(conn_list);
@@ -99,7 +50,7 @@ static LIST_HEAD(conn_list, Connection) conn_list = LIST_HEAD_INITIALIZER(conn_l
  * callback it should be called shortly after.
  */
 
-Connection *ConnCreate(RedisRaftCtx *rr, void *privdata, ConnectionCallbackFunc idle_cb)
+Connection *ConnCreate(RedisRaftCtx *rr, void *privdata, ConnectionCallbackFunc idle_cb, ConnectionFreeFunc free_cb)
 {
     static long long id = 0;
 
@@ -109,6 +60,7 @@ Connection *ConnCreate(RedisRaftCtx *rr, void *privdata, ConnectionCallbackFunc 
     conn->rr = rr;
     conn->privdata = privdata;
     conn->idle_callback = idle_cb;
+    conn->free_callback = free_cb;
     conn->id = ++id;
 
     CONN_TRACE(conn, "Connection created.");
@@ -124,6 +76,10 @@ static void ConnFree(Connection *conn)
 {
     if (!conn) {
         return;
+    }
+
+    if (conn->free_callback) {
+        conn->free_callback(conn->privdata);
     }
 
     CONN_TRACE(conn, "Connection freed.");
@@ -307,6 +263,17 @@ RRStatus ConnConnect(Connection *conn, const NodeAddr *addr, ConnectionCallbackF
     return RR_OK;
 }
 
+void ConnMarkDisconnected(Connection *conn)
+{
+    CONN_TRACE(node, "ConnMarkDisconnected: rc=%p\n", conn->rc);
+
+    conn->state = CONN_DISCONNECTED;
+    if (conn->rc) {
+        redisAsyncFree(conn->rc);
+        conn->rc = NULL;
+    }
+}
+
 /* An idle state is one that will not transition automatically to another
  * state, unless actively mutated.
  */
@@ -319,6 +286,11 @@ bool ConnIsIdle(Connection *conn)
 bool ConnIsConnected(Connection *conn)
 {
     return (conn->state == CONN_CONNECTED && !(conn->flags & CONN_TERMINATING));
+}
+
+const char *ConnGetStateStr(Connection *conn)
+{
+    return ConnStateStr[conn->state];
 }
 
 void *ConnGetPrivateData(Connection *conn)
