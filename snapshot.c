@@ -337,7 +337,7 @@ static int updateNodeFromSnapshot(RedisRaftCtx *rr, raft_node_t *node, SnapshotC
 
 static void createNodeFromSnapshot(RedisRaftCtx *rr, SnapshotCfgEntry *cfg)
 {
-    Node *n = NodeInit(rr, cfg->id, &cfg->addr);
+    Node *n = NodeCreate(rr, cfg->id, &cfg->addr);
     raft_node_t *rn;
 
     if (cfg->voting) {

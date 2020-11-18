@@ -52,7 +52,7 @@ static LIST_HEAD(conn_list, Connection) conn_list = LIST_HEAD_INITIALIZER(conn_l
 
 Connection *ConnCreate(RedisRaftCtx *rr, void *privdata, ConnectionCallbackFunc idle_cb, ConnectionFreeFunc free_cb)
 {
-    static long long id = 0;
+    static unsigned long id = 0;
 
     Connection *conn = RedisModule_Calloc(1, sizeof(Connection));
 
@@ -69,8 +69,6 @@ Connection *ConnCreate(RedisRaftCtx *rr, void *privdata, ConnectionCallbackFunc 
 }
 
 /* Free a connection object.
- *
- * FIXME: When shoukd it be called?
  */
 static void ConnFree(Connection *conn)
 {
@@ -84,7 +82,6 @@ static void ConnFree(Connection *conn)
 
     CONN_TRACE(conn, "Connection freed.");
 
-    /* FIXME: What about rc? */
     LIST_REMOVE(conn, entries);
     RedisModule_Free(conn);
 }
@@ -170,6 +167,7 @@ static void handleConnected(const redisAsyncContext *c, int status)
  */
 static void handleDisconnected(const redisAsyncContext *c, int status)
 {
+    UNUSED(status);
     Connection *conn = (Connection *) c->data;
 
     CONN_TRACE(conn, "handleDisconnected: rc=%p\n",

@@ -618,7 +618,7 @@ void raftNotifyMembershipEvent(raft_server_t *raft, void *user_data, raft_node_t
             }
 
             /* Allocate a new node */
-            node = NodeInit(rr, cfgchange->id, &cfgchange->addr);
+            node = NodeCreate(rr, cfgchange->id, &cfgchange->addr);
             assert(node != NULL);
 
             raft_node_set_udata(raft_node, node);

@@ -34,6 +34,8 @@ OBJECTS = \
 	  redisraft.o \
 	  common.o \
 	  node.o \
+	  node_addr.o \
+	  join.o \
 	  util.o \
 	  config.o \
 	  raft.o \
