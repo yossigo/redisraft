@@ -2136,30 +2136,13 @@ void handleShardGroupAdd(RedisRaftCtx *rr, RaftReq *req)
         goto exit;
     }
 
-    /* Serialize the shardgroup */
-    char *payload = ShardGroupSerialize(&req->r.shardgroup_add);
-    if (!payload)
-        goto exit;
+    if (ShardGroupAppendLogEntry(rr, &req->r.shardgroup_add,
+                                 RAFT_LOGTYPE_ADD_SHARDGROUP, req) == RR_ERROR) goto exit;
 
-    /* Set up a Raft log entry */
-    raft_entry_t *entry = raft_entry_new(strlen(payload));
-    entry->type = RAFT_LOGTYPE_ADD_SHARDGROUP;
-    entry->id = rand();
-    entryAttachRaftReq(rr, entry, req); /* So we can produce a reply */
-    memcpy(entry->data, payload, strlen(payload));
-    RedisModule_Free(payload);
-
-    /* Submit */
-    msg_entry_response_t response;
-    int e = raft_recv_entry(rr->raft, entry, &response);
-    if (e != 0) {
-        replyRaftError(req->ctx, e);
-    }
-
-    raft_entry_release(entry);
     return;
 
 exit:
+    RedisModule_ReplyWithError(req->ctx, "failed, please check logs.");
     RaftReqFree(req);
 }
 
@@ -2232,5 +2215,6 @@ static RaftReqHandler RaftReqHandlers[] = {
     handleClientDisconnect, /* RR_CLIENT_DISCONNECT */
     handleShardGroupAdd,    /* RR_SHARDGROUP_ADD */
     handleShardGroupGet,    /* RR_SHARDGROUP_GET */
+    handleShardGroupLink,   /* RR_SHARDGROUP_LINK */
     NULL
 };

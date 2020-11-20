@@ -368,7 +368,8 @@ enum RaftReqType {
     RR_DEBUG,
     RR_CLIENT_DISCONNECT,
     RR_SHARDGROUP_ADD,
-    RR_SHARDGROUP_GET
+    RR_SHARDGROUP_GET,
+    RR_SHARDGROUP_LINK
 };
 
 extern const char *RaftReqTypeStr[];
@@ -502,6 +503,9 @@ typedef struct RaftReq {
             unsigned long long client_id;
         } client_disconnect;
         struct ShardGroup shardgroup_add;
+        struct {
+            NodeAddr addr;
+        } shardgroup_link;
         RaftDebugReq debug;
     } r;
 } RaftReq;
@@ -714,5 +718,7 @@ RRStatus ShardingInfoUpdateShardGroup(RedisRaftCtx *rr, ShardGroup *new_sg);
 void ShardingInfoRDBSave(RedisModuleIO *rdb);
 void ShardingInfoRDBLoad(RedisModuleIO *rdb);
 void ClusterPeriodicCall(RedisRaftCtx *rr);
+RRStatus ShardGroupAppendLogEntry(RedisRaftCtx *rr, ShardGroup *sg, int type, void *user_data);
+void handleShardGroupLink(RedisRaftCtx *rr, RaftReq *req);
 
 #endif  /* _REDISRAFT_H */
