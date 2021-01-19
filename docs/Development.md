@@ -20,7 +20,7 @@ To run tests in a Python virtualenv, follow these steps:
 
     $ mkdir -p .env
     $ virtualenv .env
-    $ . .env/bin/active
+    $ . .env/bin/activate
     $ pip install -r tests/integration/requirements.txt
     $ make tests
 
@@ -63,7 +63,7 @@ Then execute:
 ### Jepsen
 
 See [jepsen/README.md](../jepsen/README.md) for information on using Jepsen to test
-Redis Raft for linerizability violations.
+Redis Raft for linearizability violations.
 
 General Design
 --------------
