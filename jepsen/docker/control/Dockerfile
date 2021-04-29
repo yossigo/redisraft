@@ -21,6 +21,7 @@ RUN wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein
 
 ARG JEPSEN_REPO=https://github.com/yossigo/jepsen-redisraft
 RUN git clone $JEPSEN_REPO /jepsen && \
+    git checkout cluster-protocol && \
     cd /jepsen && \
     lein install
 
