@@ -1,13 +1,10 @@
 name: Jepsen
 
-on:
-  schedule:
-    - cron: '0 0 * * *'
+on: [push]
 
 jobs:
   jepsen:
     runs-on: ubuntu-20.04
-    if: github.repository == 'redislabs/redisraft'
     steps:
     - uses: actions/checkout@v1
     - name: Install ripgrep
@@ -30,4 +27,4 @@ jobs:
                   --concurrency 4n \
                   --nemesis kill,pause,partition,member \
                   --redis-version 6.2.2 \
-                  --raft-version ${{ steps.vars.outputs.git_sha }} | rg --passthrough 'Everything looks good'
+                  --raft-version ${{ steps.vars.outputs.git_sha }} | rg --passthrough --invert-match 'Analysis invalid'
