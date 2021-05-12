@@ -28,3 +28,9 @@ jobs:
                   --nemesis kill,pause,partition,member \
                   --redis-version 6.2.2 \
                   --raft-version master | rg --passthrough '^0 failures'
+    - name: Archive Jepsen results
+      uses: actions/upload-artifacts@v2
+      if: failure()
+      with:
+        name: jepsen-results
+        path: ./jepsen/docker/store
