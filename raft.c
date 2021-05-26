@@ -49,69 +49,78 @@ static RedisModuleDict *multiClientState = NULL;
 
 /* ------------------------------------ Command Classification ------------------------------------ */
 
-static RedisModuleDict *readonlyCommandDict = NULL;
+static RedisModuleDict *commandSpecDict = NULL;
 
-static void populateReadonlyCommandDict(RedisModuleCtx *ctx)
+#define CMD_SPEC_READONLY       1
+#define CMD_SPEC_UNSUPPORTED    2
+
+typedef struct {
+    char *name;
+    unsigned int flags;
+} CommandSpec;
+
+static void populateCommandSpecDict(RedisModuleCtx *ctx)
 {
-    static char *commands[] = {
-        "get",
-        "strlen",
-        "exists",
-        "getbit",
-        "getrange",
-        "substr",
-        "mget",
-        "llen",
-        "lindex",
-        "lrange",
-        "scard",
-        "sismember",
-        "srandmember",
-        "sinter",
-        "sunion",
-        "sdiff",
-        "smembers",
-        "sscan",
-        "zrange",
-        "zrangebyscore",
-        "zrevrangebyscore",
-        "zrangebylex",
-        "zrevrangebylex",
-        "zcount",
-        "zlexcount",
-        "zrevrange",
-        "zcard",
-        "zscore",
-        "zrank",
-        "zrevrank",
-        "zscan",
-        "hmget",
-        "hlen",
-        "hstrlen",
-        "hkeys",
-        "hvals",
-        "hgetall",
-        "hexists",
-        "hscan",
-        "randomkey",
-        "keys",
-        "scan",
-        "dbsize",
-        "ttl",
-        "bitcount",
-        "georadius_ro",
-        "georadiusbymember_ro",
-        "geohash",
-        "geopos",
-        "geodist",
-        "pfcount",
-        NULL
+    static CommandSpec commands[] = {
+        { "get",                    CMD_SPEC_READONLY },
+        { "strlen",                 CMD_SPEC_READONLY },
+        { "exists",                 CMD_SPEC_READONLY },
+        { "getbit",                 CMD_SPEC_READONLY },
+        { "getrange",               CMD_SPEC_READONLY },
+        { "substr",                 CMD_SPEC_READONLY },
+        { "mget",                   CMD_SPEC_READONLY },
+        { "llen",                   CMD_SPEC_READONLY },
+        { "lindex",                 CMD_SPEC_READONLY },
+        { "lrange",                 CMD_SPEC_READONLY },
+        { "scard",                  CMD_SPEC_READONLY },
+        { "sismember",              CMD_SPEC_READONLY },
+        { "srandmember",            CMD_SPEC_READONLY },
+        { "sinter",                 CMD_SPEC_READONLY },
+        { "sunion",                 CMD_SPEC_READONLY },
+        { "sdiff",                  CMD_SPEC_READONLY },
+        { "smembers",               CMD_SPEC_READONLY },
+        { "sscan",                  CMD_SPEC_READONLY },
+        { "zrange",                 CMD_SPEC_READONLY },
+        { "zrangebyscore",          CMD_SPEC_READONLY },
+        { "zrevrangebyscore",       CMD_SPEC_READONLY },
+        { "zrangebylex",            CMD_SPEC_READONLY },
+        { "zrevrangebylex",         CMD_SPEC_READONLY },
+        { "zcount",                 CMD_SPEC_READONLY },
+        { "zlexcount",              CMD_SPEC_READONLY },
+        { "zrevrange",              CMD_SPEC_READONLY },
+        { "zcard",                  CMD_SPEC_READONLY },
+        { "zscore",                 CMD_SPEC_READONLY },
+        { "zrank",                  CMD_SPEC_READONLY },
+        { "zrevrank",               CMD_SPEC_READONLY },
+        { "zscan",                  CMD_SPEC_READONLY },
+        { "hmget",                  CMD_SPEC_READONLY },
+        { "hlen",                   CMD_SPEC_READONLY },
+        { "hstrlen",                CMD_SPEC_READONLY },
+        { "hkeys",                  CMD_SPEC_READONLY },
+        { "hvals",                  CMD_SPEC_READONLY },
+        { "hgetall",                CMD_SPEC_READONLY },
+        { "hexists",                CMD_SPEC_READONLY },
+        { "hscan",                  CMD_SPEC_READONLY },
+        { "randomkey",              CMD_SPEC_READONLY },
+        { "keys",                   CMD_SPEC_READONLY },
+        { "scan",                   CMD_SPEC_READONLY },
+        { "dbsize",                 CMD_SPEC_READONLY },
+        { "ttl",                    CMD_SPEC_READONLY },
+        { "bitcount",               CMD_SPEC_READONLY },
+        { "georadius_ro",           CMD_SPEC_READONLY },
+        { "georadiusbymember_ro",   CMD_SPEC_READONLY },
+        { "geohash",                CMD_SPEC_READONLY },
+        { "geopos",                 CMD_SPEC_READONLY },
+        { "geodist",                CMD_SPEC_READONLY },
+        { "pfcount",                CMD_SPEC_READONLY },
+        { "sync",                   CMD_SPEC_UNSUPPORTED },
+        { "psync",                  CMD_SPEC_UNSUPPORTED },
+        { NULL,                     0 }
     };
 
-    readonlyCommandDict = RedisModule_CreateDict(ctx);
-    int i;
-    for (i = 0; commands[i] != NULL; i++) {
-        RedisModule_DictSetC(readonlyCommandDict, commands[i], strlen(commands[i]), (void *) 0x01);
+    commandSpecDict = RedisModule_CreateDict(ctx);
+    for (int i = 0; commands[i].name != NULL; i++) {
+        RedisModule_DictSetC(commandSpecDict, commands[i].name, strlen(commands[i].name), &commands[i]);
     }
 }
 
@@ -1151,8 +1160,8 @@ RRStatus RedisRaftInit(RedisModuleCtx *ctx, RedisRaftCtx *rr, RedisRaftConfig *c
      */
     atexit(__setProcessExiting);
 
-    /* Populate Read-only command dict */
-    populateReadonlyCommandDict(ctx);
+    /* Populate command spec dict */
+    populateCommandSpecDict(ctx);
 
     /* Initialize uv loop */
     rr->loop = RedisModule_Alloc(sizeof(uv_loop_t));
@@ -1478,30 +1487,26 @@ exit:
     RaftReqFree(req);
 }
 
-static bool checkReadOnlyCommand(RedisModuleString *cmd)
+static unsigned int getAggregateCommandSpecFlags(RaftRedisCommandArray *array)
 {
-    size_t cmd_len;
-    const char *cmd_str = RedisModule_StringPtrLen(cmd, &cmd_len);
-    char lcmd[cmd_len];
+    unsigned int flags = 0;
 
-    int i;
-    for (i = 0; i < cmd_len; i++) {
-        lcmd[i] = tolower(cmd_str[i]);
+    for (int i = 0; i < array->len; i++) {
+        size_t cmd_len;
+        const char *cmd_str = RedisModule_StringPtrLen(array->commands[i]->argv[0], &cmd_len);
+        char *lcmd = RedisModule_Alloc(cmd_len);
+
+        for (size_t j = 0; j < cmd_len; j++) {
+            lcmd[j] = (char) tolower(cmd_str[j]);
+        }
+
+        CommandSpec *cs = RedisModule_DictGetC(commandSpecDict, lcmd, cmd_len, NULL);
+        if (cs) flags |= cs->flags;
+
+        RedisModule_Free(lcmd);
     }
 
-    return RedisModule_DictGetC(readonlyCommandDict, lcmd, cmd_len, NULL) != NULL;
-}
-
-static bool checkReadOnlyCommandArray(RaftRedisCommandArray *array)
-{
-    int i;
-
-    for (i = 0; i < array->len; i++) {
-        if (!checkReadOnlyCommand(array->commands[i]->argv[0]))
-            return false;
-    }
-
-    return true;
+    return flags;
 }
 
 /* Handle MULTI/EXEC transactions here.
@@ -1789,7 +1794,11 @@ static void handleRedisCommand(RedisRaftCtx *rr,RaftReq *req)
     /* If command is read only we don't push it to the log, but queue it
      * until we can confirm it's safe to execute (i.e. still a leader).
      */
-    if (checkReadOnlyCommandArray(&req->r.redis.cmds)) {
+    unsigned int cmd_flags = getAggregateCommandSpecFlags(&req->r.redis.cmds);
+    if (cmd_flags & CMD_SPEC_UNSUPPORTED) {
+        RedisModule_ReplyWithError(req->ctx, "ERR not supported by RedisRaft");
+        goto exit;
+    } else if (cmd_flags & CMD_SPEC_READONLY) {
         if (rr->config->quorum_reads) {
             raft_queue_read_request(rr->raft, handleReadOnlyCommand, req);
         } else {
