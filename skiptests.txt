@@ -1,0 +1,48 @@
+## Integer encoding -- not supported for modules at the moment.
+GETDEL propagate as DEL command to replica
+GETEX without argument does not propagate to replica
+SETBIT against integer-encoded key
+GETBIT against integer-encoded key
+SETRANGE against integer-encoded key
+## Blocking commands -- not supported
+BLPOP, LPUSH + DEL should not awake blocked client
+BLPOP, LPUSH + DEL + SET should not awake blocked client
+BLPOP with same key multiple times should work
+BLPOP with same key multiple times should work (issue #801)
+MULTI/EXEC is isolated from the point of view of BLPOP
+BLPOP with variadic LPUSH
+BRPOPLPUSH with zero timeout should block indefinitely
+BLMOVE left left with zero timeout should block indefinitely
+BLMOVE left right with zero timeout should block indefinitely
+BLMOVE right left with zero timeout should block indefinitely
+BLMOVE right right with zero timeout should block indefinitely
+BLMOVE (left, left) with a client BLPOPing the target list
+BLMOVE (left, right) with a client BLPOPing the target list
+BLMOVE (right, left) with a client BLPOPing the target list
+BLMOVE (right, right) with a client BLPOPing the target list
+BRPOPLPUSH with wrong destination type
+BRPOPLPUSH maintains order of elements after failure
+BRPOPLPUSH with multiple blocked clients
+Linked LMOVEs
+PUSH resulting from BRPOPLPUSH affect WATCH
+BLPOP when new key is moved into place
+BLPOP when result key is created by SORT..STORE
+BLPOP: with single empty list argument
+BLPOP: with non-integer timeout
+BLPOP: with zero timeout should block indefinitely
+BLPOP: arguments are empty
+BRPOP: with single empty list argument
+BRPOP: with non-integer timeout
+BRPOP: with zero timeout should block indefinitely
+BRPOP: arguments are empty
+Regression for bug 593 - chaining BRPOPLPUSH with other blocking cmds
+BZPOPMIN, ZADD + DEL should not awake blocked client
+BZPOPMIN, ZADD + DEL + SET should not awake blocked client
+BZPOPMIN with same key multiple times should work
+MULTI/EXEC is isolated from the point of view of BZPOPMIN
+## Module API Bug? CLIENT UNBLOCK crashes Redis!
+client unblock tests
+## No RESP3 Support in modules
+ZINTER RESP3 - ziplist
+ZINTER RESP3 - skiplist
+
