@@ -100,6 +100,12 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "watch",                  CMD_SPEC_DONT_INTERCEPT },
             { "unwatch",                CMD_SPEC_DONT_INTERCEPT },
             { "quit",                   CMD_SPEC_DONT_INTERCEPT },
+            { "subscribe",              CMD_SPEC_DONT_INTERCEPT },
+            { "psubscribe",             CMD_SPEC_DONT_INTERCEPT },
+            { "unsubscribe",            CMD_SPEC_DONT_INTERCEPT },
+            { "punsubscribe",           CMD_SPEC_DONT_INTERCEPT },
+            { "publish",                CMD_SPEC_DONT_INTERCEPT },
+            { "pubsub",                 CMD_SPEC_DONT_INTERCEPT },
             { NULL,                     0 }
     };
 
