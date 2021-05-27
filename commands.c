@@ -71,9 +71,14 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "sync",                   CMD_SPEC_UNSUPPORTED },
             { "psync",                  CMD_SPEC_UNSUPPORTED },
             { "reset",                  CMD_SPEC_UNSUPPORTED },
+            { "reset",                  CMD_SPEC_UNSUPPORTED },
+            { "bgrewriteaof",           CMD_SPEC_UNSUPPORTED },
+            { "slaveof",                CMD_SPEC_UNSUPPORTED },
+            { "replicaof",              CMD_SPEC_UNSUPPORTED },
             { "auth",                   CMD_SPEC_DONT_INTERCEPT },
             { "ping",                   CMD_SPEC_DONT_INTERCEPT },
             { "save",                   CMD_SPEC_DONT_INTERCEPT },
+            { "bgsave",                 CMD_SPEC_DONT_INTERCEPT },
             { "module",                 CMD_SPEC_DONT_INTERCEPT },
             { "raft",                   CMD_SPEC_DONT_INTERCEPT },
             { "raft.entry",             CMD_SPEC_DONT_INTERCEPT },
@@ -110,6 +115,9 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
     return RR_OK;
 }
 
+/* Look up the specified command in the command spec table and return the
+ * CommandSpec associated with it, or NULL.
+ */
 const CommandSpec *CommandSpecGet(const RedisModuleString *cmd)
 {
     size_t cmd_len;
@@ -133,6 +141,9 @@ const CommandSpec *CommandSpecGet(const RedisModuleString *cmd)
     return cs;
 }
 
+/* For a given RaftRedisCommandArray, return a flags value that represents
+ * the aggregate flags of all commands.
+ */
 unsigned int CommandSpecGetAggregateFlags(RaftRedisCommandArray *array)
 {
     unsigned int flags = 0;
