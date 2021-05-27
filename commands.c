@@ -71,7 +71,6 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "sync",                   CMD_SPEC_UNSUPPORTED },
             { "psync",                  CMD_SPEC_UNSUPPORTED },
             { "reset",                  CMD_SPEC_UNSUPPORTED },
-            { "reset",                  CMD_SPEC_UNSUPPORTED },
             { "bgrewriteaof",           CMD_SPEC_UNSUPPORTED },
             { "slaveof",                CMD_SPEC_UNSUPPORTED },
             { "replicaof",              CMD_SPEC_UNSUPPORTED },
