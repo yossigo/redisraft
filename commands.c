@@ -70,6 +70,7 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "pfcount",                CMD_SPEC_READONLY },
             { "sync",                   CMD_SPEC_UNSUPPORTED },
             { "psync",                  CMD_SPEC_UNSUPPORTED },
+            { "reset",                  CMD_SPEC_UNSUPPORTED },
             { "auth",                   CMD_SPEC_DONT_INTERCEPT },
             { "ping",                   CMD_SPEC_DONT_INTERCEPT },
             { "save",                   CMD_SPEC_DONT_INTERCEPT },
