@@ -553,6 +553,19 @@ typedef struct SnapshotResult {
     char err[256];
 } SnapshotResult;
 
+/* Entry type for the internal command table used by RedisRaft,
+ * used to determine how different intercepted Redis commands are
+ * handled.
+ */
+typedef struct {
+    char *name;                 /* Command name */
+    unsigned int flags;         /* Command flags, see CMD_SPEC_* */
+} CommandSpec;
+
+#define CMD_SPEC_READONLY       (1<<0)      /* Command is a read-only command */
+#define CMD_SPEC_UNSUPPORTED    (1<<1)      /* Command is not supported, should be rejected */
+#define CMD_SPEC_DONT_INTERCEPT (1<<2)      /* Command should not be intercepted to RAFT */
+
 /* Command filtering re-entrancy counter handling.
  *
  * This mechanism tracks calls from Redis Raft into Redis and used by the
@@ -746,5 +759,10 @@ void handleShardGroupLink(RedisRaftCtx *rr, RaftReq *req);
 /* join.c */
 void HandleClusterJoinCompleted(RedisRaftCtx *rr, RaftReq *pReq);
 void handleClusterJoin(RedisRaftCtx *rr, RaftReq *req);
+
+/* commands.c */
+RRStatus CommandSpecInit(RedisModuleCtx *ctx);
+unsigned int CommandSpecGetAggregateFlags(RaftRedisCommandArray *array);
+const CommandSpec *CommandSpecGet(const RedisModuleString *cmd);
 
 #endif  /* _REDISRAFT_H */
