@@ -1,9 +1,12 @@
-## Integer encoding -- not supported for modules at the moment.
+## No SYNC support
 GETDEL propagate as DEL command to replica
 GETEX without argument does not propagate to replica
-SETBIT against integer-encoded key
-GETBIT against integer-encoded key
-SETRANGE against integer-encoded key
+EXPIRE relative and absolute propagation to replicas
+GETEX propagate as to replica as PERSIST, DEL, or nothing
+MULTI / EXEC is propagated correctly (single write command)
+MULTI / EXEC is propagated correctly (empty transaction)
+MULTI / EXEC is propagated correctly (read-only commands)
+MULTI / EXEC is propagated correctly (write command, no effect)
 ## Blocking commands -- not supported
 BLPOP, LPUSH + DEL should not awake blocked client
 BLPOP, LPUSH + DEL + SET should not awake blocked client
@@ -40,9 +43,95 @@ BZPOPMIN, ZADD + DEL should not awake blocked client
 BZPOPMIN, ZADD + DEL + SET should not awake blocked client
 BZPOPMIN with same key multiple times should work
 MULTI/EXEC is isolated from the point of view of BZPOPMIN
+BZPOPMIN with variadic ZADD
+BZPOPMIN with zero timeout should block indefinitely
 ## Module API Bug? CLIENT UNBLOCK crashes Redis!
 client unblock tests
 ## No RESP3 Support in modules
 ZINTER RESP3 - ziplist
 ZINTER RESP3 - skiplist
-
+HRANDFIELD with RESP3
+ZRANGESTORE RESP3
+ZRANDMEMBER with RESP3
+## Streams - no blocking support
+Blocking XREAD waiting new data
+Blocking XREAD waiting old data
+XREAD: XADD + DEL should not awake client
+XREAD: XADD + DEL + LPUSH should not awake client
+XREAD with same stream name multiple times should work
+XREAD + multiple XADD inside transaction
+XREAD streamID edge (blocking)
+XGROUP DESTROY should unblock XREADGROUP with -NOGROUP
+RENAME can unblock XREADGROUP with data
+RENAME can unblock XREADGROUP with -NOGROUP
+## No AOF
+EXPIRE and SET/GETEX EX/PX/EXAT/PXAT option, TTL should not be reset after loadaof
+SET - use KEEPTTL option, TTL should not be removed after loadaof
+GETEX use of PERSIST option should remove TTL after loadaof
+EXPIRES after AOF reload (without rewrite)
+## Streams - not sure why these fail
+XADD with MAXLEN option and the '~' argument
+XTRIM with MAXLEN option basic test
+## RESET command is not supported at the moment
+RESET clears client state
+RESET clears MONITOR state
+RESET clears and discards MULTI state
+RESET clears Pub/Sub state
+RESET clears authenticated state
+## MULTI/EXEC anomalies, due to having to handle multi state ourselves.
+MUTLI / EXEC basics
+WATCH inside MULTI is not allowed
+EXEC fails if there are errors while queueing commands #1
+EXEC fails if there are errors while queueing commands #2
+If EXEC aborts, the client MULTI state is cleared
+EXEC works on WATCHed key not modified
+After successful EXEC key is no longer watched
+After failed EXEC key is no longer watched
+It is possible to UNWATCH
+FLUSHALL does not touch non affected keys
+FLUSHDB does not touch non affected keys
+DISCARD should clear the WATCH dirty flag on the client
+DISCARD should UNWATCH all the keys
+DISCARD should not fail during OOM
+MULTI and script timeout
+## Lua scripts are replicated as-is, so the SCRIPT KILL command cannot work
+EXEC and script timeout
+MULTI-EXEC body and script timeout
+just EXEC and script timeout
+## Replicas are not supported the usual way:
+exec with write commands and state change
+exec with read commands and stale replica state change
+## No blocking commands:
+Blocking commands ignores the timeout
+## No replication:
+MULTI propagation of PUBLISH
+MULTI propagation of SCRIPT LOAD
+MULTI propagation of SCRIPT LOAD
+MULTI propagation of XREADGROUP
+## Unexplained yet:
+EXEC with only read commands should not be rejected when OOM
+EXEC with at least one use-memory command should fail
+## redis-cli but no SYNC support:
+Dumping an RDB
+Connecting as a replica
+## No AOF
+Same dataset digest if saving/reloading as AOF?
+EXPIRES after a reload (snapshot + append only file rewrite
+EXPIRES after AOF reload (without rewrite)
+## No RDB
+Perform a final SAVE to leave a clean DB on disk
+EXPIRES after a reload (snapshot + append only file rewrite)
+PIPELINING stresser (also a regression for the old epoll bug)
+## SLOWLOG - not sure why it fails
+SLOWLOG - Some commands can redact sensitive fields
+## SLOWLOG - fails due to RAFT command injection
+SLOWLOG - Rewritten commands are logged as their original command
+SLOWLOG - commands with too many arguments are trimmed
+SLOWLOG - too long arguments are trimmed
+## MONITOR shows RAFT command
+MONITOR can log executed commands
+MONITOR can log commands issued by the scripting engine
+MONITOR supports redacting command arguments
+MONITOR correctly handles multi-exec cases
+## Command stats are wrong due toe RAFT command injection
+command stats for MULTI
