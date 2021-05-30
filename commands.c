@@ -105,6 +105,9 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "punsubscribe",           CMD_SPEC_DONT_INTERCEPT },
             { "publish",                CMD_SPEC_DONT_INTERCEPT },
             { "pubsub",                 CMD_SPEC_DONT_INTERCEPT },
+            { "slowlog",                CMD_SPEC_DONT_INTERCEPT },
+            { "debug",                  CMD_SPEC_DONT_INTERCEPT },
+            { "acl",                    CMD_SPEC_DONT_INTERCEPT },
             { NULL,                     0 }
     };
 
