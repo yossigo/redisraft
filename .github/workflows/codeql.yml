@@ -18,13 +18,16 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
 
+    - name: Install build dependencies
+      run: sudo apt-get install -y build-essential autoconf automake libtool cmake libbsd-dev lcov
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v1
       with:
         languages: ${{ matrix.language }}
 
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v1
+    - name: Build
+      run: make
 
     - name: CodeQL Analysis
       uses: github/codeql-action/analyze@v1
