@@ -236,6 +236,12 @@ The address and port on which the node will be advertised. Other nodes must be a
 
 *Default*: When not specified, `addr` will be set to the first non-local network interface as its host and will use the value of the Redis `port` for the port.
 
+### `loglevel`
+
+Sets the logging level of RedisRaft. Possible values are `error`, `info`, `verbose` and `debug`. Note that logging goes through Redis which applies its own so you may need to adjust Redis's own `loglevel` configuration parameter.
+
+*Default*: `info`
+
 ### `raft-log-filename`
 
 The name of the Raft log file.
