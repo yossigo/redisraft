@@ -74,6 +74,7 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "bgrewriteaof",           CMD_SPEC_UNSUPPORTED },
             { "slaveof",                CMD_SPEC_UNSUPPORTED },
             { "replicaof",              CMD_SPEC_UNSUPPORTED },
+            { "debug",                  CMD_SPEC_UNSUPPORTED },
             { "auth",                   CMD_SPEC_DONT_INTERCEPT },
             { "ping",                   CMD_SPEC_DONT_INTERCEPT },
             { "save",                   CMD_SPEC_DONT_INTERCEPT },
@@ -106,7 +107,6 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "publish",                CMD_SPEC_DONT_INTERCEPT },
             { "pubsub",                 CMD_SPEC_DONT_INTERCEPT },
             { "slowlog",                CMD_SPEC_DONT_INTERCEPT },
-            { "debug",                  CMD_SPEC_DONT_INTERCEPT },
             { "acl",                    CMD_SPEC_DONT_INTERCEPT },
             { NULL,                     0 }
     };
