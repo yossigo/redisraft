@@ -17,6 +17,7 @@ static RedisModuleDict *commandSpecDict = NULL;
 RRStatus CommandSpecInit(RedisModuleCtx *ctx)
 {
     static CommandSpec commands[] = {
+            /* Core Redis Commands */
             { "get",                    CMD_SPEC_READONLY },
             { "strlen",                 CMD_SPEC_READONLY },
             { "exists",                 CMD_SPEC_READONLY },
@@ -80,17 +81,6 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "save",                   CMD_SPEC_DONT_INTERCEPT },
             { "bgsave",                 CMD_SPEC_DONT_INTERCEPT },
             { "module",                 CMD_SPEC_DONT_INTERCEPT },
-            { "raft",                   CMD_SPEC_DONT_INTERCEPT },
-            { "raft.entry",             CMD_SPEC_DONT_INTERCEPT },
-            { "raft.config",            CMD_SPEC_DONT_INTERCEPT },
-            { "raft.cluster",           CMD_SPEC_DONT_INTERCEPT },
-            { "raft.shardgroup",        CMD_SPEC_DONT_INTERCEPT },
-            { "raft.node",              CMD_SPEC_DONT_INTERCEPT },
-            { "raft.ae",                CMD_SPEC_DONT_INTERCEPT },
-            { "raft.requestvote",       CMD_SPEC_DONT_INTERCEPT },
-            { "raft.loadsnapshot",      CMD_SPEC_DONT_INTERCEPT },
-            { "raft.debug",             CMD_SPEC_DONT_INTERCEPT },
-            { "raft.info",              CMD_SPEC_DONT_INTERCEPT },
             { "info",                   CMD_SPEC_DONT_INTERCEPT },
             { "client",                 CMD_SPEC_DONT_INTERCEPT },
             { "config",                 CMD_SPEC_DONT_INTERCEPT },
@@ -108,6 +98,19 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx)
             { "pubsub",                 CMD_SPEC_DONT_INTERCEPT },
             { "slowlog",                CMD_SPEC_DONT_INTERCEPT },
             { "acl",                    CMD_SPEC_DONT_INTERCEPT },
+
+            /* RedisRaft Commands */
+            { "raft",                   CMD_SPEC_DONT_INTERCEPT },
+            { "raft.entry",             CMD_SPEC_DONT_INTERCEPT },
+            { "raft.config",            CMD_SPEC_DONT_INTERCEPT },
+            { "raft.cluster",           CMD_SPEC_DONT_INTERCEPT },
+            { "raft.shardgroup",        CMD_SPEC_DONT_INTERCEPT },
+            { "raft.node",              CMD_SPEC_DONT_INTERCEPT },
+            { "raft.ae",                CMD_SPEC_DONT_INTERCEPT },
+            { "raft.requestvote",       CMD_SPEC_DONT_INTERCEPT },
+            { "raft.loadsnapshot",      CMD_SPEC_DONT_INTERCEPT },
+            { "raft.debug",             CMD_SPEC_DONT_INTERCEPT },
+            { "raft.info",              CMD_SPEC_DONT_INTERCEPT },
             { NULL,                     0 }
     };
 
