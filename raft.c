@@ -1542,11 +1542,22 @@ static bool handleMultiExec(RedisRaftCtx *rr, RaftReq *req)
 
     /* Are we in MULTI? */
     if (multiState) {
-        /* TODO: Add command checks and set multiState->error if necessary; This probably requires
-         * Module API extensions.
+        /* We have to detct commands that are unsupported or must not be intercepted,
+         * and reject the transaction.
          */
-        RaftRedisCommandArrayMove(&multiState->cmds, &req->r.redis.cmds);
-        RedisModule_ReplyWithSimpleString(req->ctx, "QUEUED");
+        unsigned int unspecified = 0;
+        unsigned int cmd_flags = CommandSpecGetAggregateFlags(&req->r.redis.cmds, &unspecified);
+
+        if (cmd_flags & CMD_SPEC_UNSUPPORTED) {
+            RedisModule_ReplyWithError(req->ctx, "ERR not supported by RedisRaft");
+            multiState->error = 1;
+        } else if (cmd_flags & CMD_SPEC_DONT_INTERCEPT) {
+            RedisModule_ReplyWithError(req->ctx, "ERR not supported by RedisRaft inside MULTI/EXEC");
+            multiState->error = 1;
+        } else {
+            RaftRedisCommandArrayMove(&multiState->cmds, &req->r.redis.cmds);
+            RedisModule_ReplyWithSimpleString(req->ctx, "QUEUED");
+        }
 
         RaftReqFree(req);
         return true;
@@ -1689,14 +1700,19 @@ static void handleRedisCommand(RedisRaftCtx *rr,RaftReq *req)
         goto exit;
     }
 
-    /* If command is read only we don't push it to the log, but queue it
-     * until we can confirm it's safe to execute (i.e. still a leader).
+    /* Handle the special case of read-only commands here: if quroum reads
+     * are enabled schedule the request to be processed when we have a guarantee
+     * we're still a leader. Otherwise, just process the reads.
+     *
+     * Normally we can expect a single command in the request, unless it is a
+     * MULTI/EXEC transaction in which case all queued commands are handled at once.
      */
-    unsigned int cmd_flags = CommandSpecGetAggregateFlags(&req->r.redis.cmds);
+    unsigned int unspecified = 0;
+    unsigned int cmd_flags = CommandSpecGetAggregateFlags(&req->r.redis.cmds, &unspecified);
     if (cmd_flags & CMD_SPEC_UNSUPPORTED) {
         RedisModule_ReplyWithError(req->ctx, "ERR not supported by RedisRaft");
         goto exit;
-    } else if (cmd_flags & CMD_SPEC_READONLY) {
+    } else if (cmd_flags & CMD_SPEC_READONLY && !unspecified) {
         if (rr->config->quorum_reads) {
             raft_queue_read_request(rr->raft, handleReadOnlyCommand, req);
         } else {

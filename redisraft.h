@@ -762,7 +762,7 @@ void handleClusterJoin(RedisRaftCtx *rr, RaftReq *req);
 
 /* commands.c */
 RRStatus CommandSpecInit(RedisModuleCtx *ctx);
-unsigned int CommandSpecGetAggregateFlags(RaftRedisCommandArray *array);
+unsigned int CommandSpecGetAggregateFlags(RaftRedisCommandArray *array, unsigned int *unspec_count);
 const CommandSpec *CommandSpecGet(const RedisModuleString *cmd);
 
 #endif  /* _REDISRAFT_H */

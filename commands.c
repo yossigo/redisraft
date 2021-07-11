@@ -153,16 +153,25 @@ const CommandSpec *CommandSpecGet(const RedisModuleString *cmd)
 }
 
 /* For a given RaftRedisCommandArray, return a flags value that represents
- * the aggregate flags of all commands.
+ * the aggregate flags of all commands. The unspec_count, if not NULL,
+ * is set to the number of commands that were not found in the command
+ * table.
  */
-unsigned int CommandSpecGetAggregateFlags(RaftRedisCommandArray *array)
+unsigned int CommandSpecGetAggregateFlags(RaftRedisCommandArray *array, unsigned int *unspec_count)
 {
     unsigned int flags = 0;
+    if (unspec_count) {
+        *unspec_count = 0;
+    }
 
     for (int i = 0; i < array->len; i++) {
         const CommandSpec *cs = CommandSpecGet(array->commands[i]->argv[0]);
         if (cs) {
             flags |= cs->flags;
+        } else {
+            if (unspec_count) {
+                (*unspec_count)++;
+            }
         }
     }
 
