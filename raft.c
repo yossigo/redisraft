@@ -1545,8 +1545,7 @@ static bool handleMultiExec(RedisRaftCtx *rr, RaftReq *req)
         /* We have to detct commands that are unsupported or must not be intercepted,
          * and reject the transaction.
          */
-        unsigned int unspecified = 0;
-        unsigned int cmd_flags = CommandSpecGetAggregateFlags(&req->r.redis.cmds, &unspecified);
+        unsigned int cmd_flags = CommandSpecGetAggregateFlags(&req->r.redis.cmds, 0);
 
         if (cmd_flags & CMD_SPEC_UNSUPPORTED) {
             RedisModule_ReplyWithError(req->ctx, "ERR not supported by RedisRaft");
@@ -1707,12 +1706,11 @@ static void handleRedisCommand(RedisRaftCtx *rr,RaftReq *req)
      * Normally we can expect a single command in the request, unless it is a
      * MULTI/EXEC transaction in which case all queued commands are handled at once.
      */
-    unsigned int unspecified = 0;
-    unsigned int cmd_flags = CommandSpecGetAggregateFlags(&req->r.redis.cmds, &unspecified);
+    unsigned int cmd_flags = CommandSpecGetAggregateFlags(&req->r.redis.cmds, CMD_SPEC_WRITE);
     if (cmd_flags & CMD_SPEC_UNSUPPORTED) {
         RedisModule_ReplyWithError(req->ctx, "ERR not supported by RedisRaft");
         goto exit;
-    } else if (cmd_flags & CMD_SPEC_READONLY && !unspecified) {
+    } else if (cmd_flags & CMD_SPEC_READONLY && !(cmd_flags & CMD_SPEC_WRITE)) {
         if (rr->config->quorum_reads) {
             raft_queue_read_request(rr->raft, handleReadOnlyCommand, req);
         } else {

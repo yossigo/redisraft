@@ -562,9 +562,10 @@ typedef struct {
     unsigned int flags;         /* Command flags, see CMD_SPEC_* */
 } CommandSpec;
 
-#define CMD_SPEC_READONLY       (1<<0)      /* Command is a read-only command */
-#define CMD_SPEC_UNSUPPORTED    (1<<1)      /* Command is not supported, should be rejected */
-#define CMD_SPEC_DONT_INTERCEPT (1<<2)      /* Command should not be intercepted to RAFT */
+#define CMD_SPEC_READONLY       (1<<1)      /* Command is a read-only command */
+#define CMD_SPEC_WRITE          (1<<2)      /* Command is a (potentially) write command */
+#define CMD_SPEC_UNSUPPORTED    (1<<3)      /* Command is not supported, should be rejected */
+#define CMD_SPEC_DONT_INTERCEPT (1<<4)      /* Command should not be intercepted to RAFT */
 
 /* Command filtering re-entrancy counter handling.
  *
@@ -762,7 +763,7 @@ void handleClusterJoin(RedisRaftCtx *rr, RaftReq *req);
 
 /* commands.c */
 RRStatus CommandSpecInit(RedisModuleCtx *ctx);
-unsigned int CommandSpecGetAggregateFlags(RaftRedisCommandArray *array, unsigned int *unspec_count);
+unsigned int CommandSpecGetAggregateFlags(RaftRedisCommandArray *array, unsigned int default_flags);
 const CommandSpec *CommandSpecGet(const RedisModuleString *cmd);
 
 #endif  /* _REDISRAFT_H */
